@@ -43,30 +43,25 @@ export async function POST(request: Request) {
     }
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const uploaded = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: "mechanic/invoice-logos",
-          resource_type: "image",
-          overwrite: true,
-        },
-        (error, result) => {
-          if (error || !result) {
-            reject(error || new Error("Cloudinary upload failed."));
-            return;
-          }
-          resolve({ secure_url: result.secure_url, public_id: result.public_id });
-        },
-      );
-      stream.end(buffer);
+    const base64 = Buffer.from(bytes).toString("base64");
+    const dataUri = `data:${file.type};base64,${base64}`;
+    const uploaded = await cloudinary.uploader.upload(dataUri, {
+      folder: "mechanic/invoice-logos",
+      resource_type: "image",
+      overwrite: true,
     });
 
     return NextResponse.json({ url: uploaded.secure_url, publicId: uploaded.public_id });
   } catch (error) {
+    const details = error && typeof error === "object" ? (error as Record<string, unknown>) : {};
+    const message =
+      (typeof details.message === "string" && details.message) ||
+      (typeof details.error === "string" && details.error) ||
+      String(error || "Logo upload failed.");
+    const status = typeof details.http_code === "number" ? details.http_code : 500;
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Logo upload failed." },
-      { status: 500 },
+      { error: message, code: details.http_code || details.name || null },
+      { status: status >= 400 && status < 500 ? status : 500 },
     );
   }
 }

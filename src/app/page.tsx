@@ -191,6 +191,10 @@ function money(value: number) {
   }).format(value);
 }
 
+function pdfMoney(value: number) {
+  return `Rs ${Number(value || 0).toFixed(2)}`;
+}
+
 function imageToDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -241,7 +245,7 @@ function getActiveGst(store: Store) {
 
 export default function Home() {
   const [role, setRole] = useState<Role | null>(null);
-const [loginRole, setLoginRole] = useState<Role>("user");
+  const [loginRole, setLoginRole] = useState<Role>("user");
   const [adminUsername, setAdminUsername] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [loginPhone, setLoginPhone] = useState("");
@@ -256,6 +260,7 @@ const [loginRole, setLoginRole] = useState<Role>("user");
   const [newPart, setNewPart] = useState<Part>({ id: "", name: "", price: 0, hsn: "" });
   const [newUser, setNewUser] = useState<AppUser>(emptyUser);
   const [newGst, setNewGst] = useState<GstProfile>(emptyGst);
+  const [partPickerItemId, setPartPickerItemId] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const activeGst = getActiveGst(store);
 
@@ -292,6 +297,11 @@ const [loginRole, setLoginRole] = useState<Role>("user");
   const matchedTemplates = store.templates.filter((template) =>
     `${template.keyword} ${template.title}`.toLowerCase().includes(templateSearch.toLowerCase()),
   );
+  const pickerItem = items.find((item) => item.id === partPickerItemId);
+  const pickerQuery = pickerItem?.name.trim().toLowerCase() || "";
+  const filteredParts = store.parts.filter((part) =>
+    `${part.name} ${part.hsn}`.toLowerCase().includes(pickerQuery),
+  );
 
   function login() {
     const user = store.users.find(
@@ -321,6 +331,11 @@ const [loginRole, setLoginRole] = useState<Role>("user");
       price: part?.price ?? 0,
       hsn: part?.hsn ?? "",
     });
+  }
+
+  function typePartName(itemId: string, partName: string) {
+    const part = store.parts.find((entry) => entry.name.toLowerCase() === partName.toLowerCase());
+    updateItem(itemId, part ? { name: part.name, price: part.price, hsn: part.hsn } : { name: partName });
   }
 
   function findCustomer(phone: string) {
@@ -411,12 +426,12 @@ const [loginRole, setLoginRole] = useState<Role>("user");
     });
     doc.line(14, y, 196, y);
     y += 10;
-    doc.text(`Subtotal: ${money(totals.subtotal)}`, 140, y);
+    doc.text(`Subtotal: ${pdfMoney(totals.subtotal)}`, 140, y);
     y += 7;
-    doc.text(`GST ${activeGst.enabled ? activeGst.taxRate : 0}%: ${money(totals.tax)}`, 140, y);
+    doc.text(`GST ${activeGst.enabled ? activeGst.taxRate : 0}%: ${pdfMoney(totals.tax)}`, 140, y);
     y += 7;
     doc.setFontSize(12);
-    doc.text(`Total: ${money(totals.total)}`, 140, y);
+    doc.text(`Total: ${pdfMoney(totals.total)}`, 140, y);
     return doc;
   }
 
@@ -612,7 +627,22 @@ const [loginRole, setLoginRole] = useState<Role>("user");
                   {items.map((item) => (
                     <div key={item.id} className="grid gap-2 rounded-lg border border-[#e2d8cb] bg-[#fbfaf7] p-3 md:grid-cols-[1fr_90px_120px_90px_40px]">
                       <div>
-                        <input list="parts" value={item.name} onChange={(event) => pickPart(item.id, event.target.value)} className="input" placeholder="Part or custom item" />
+                        <div className="flex gap-2">
+                          <input
+                            value={item.name}
+                            onChange={(event) => typePartName(item.id, event.target.value)}
+                            onFocus={() => setPartPickerItemId(item.id)}
+                            className="input"
+                            placeholder="Part or custom item"
+                          />
+                          <button
+                            onClick={() => setPartPickerItemId(item.id)}
+                            className="rounded-md border border-[#d7cdbf] bg-white px-3 text-[#1f4f46]"
+                            title="Search parts"
+                          >
+                            <Search className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                       <input value={item.hsn} onChange={(event) => updateItem(item.id, { hsn: event.target.value })} className="input" placeholder="HSN" />
                       <input type="number" value={item.price} onChange={(event) => updateItem(item.id, { price: Number(event.target.value) })} className="input" placeholder="Rate" />
@@ -623,9 +653,6 @@ const [loginRole, setLoginRole] = useState<Role>("user");
                     </div>
                   ))}
                 </div>
-                <datalist id="parts">
-                  {store.parts.map((part) => <option key={part.id} value={part.name} />)}
-                </datalist>
                 <button onClick={() => setItems((current) => [...current, newItem()])} className="mt-3 btn-secondary">
                   <Plus className="h-4 w-4" /> Add item
                 </button>
@@ -675,6 +702,54 @@ const [loginRole, setLoginRole] = useState<Role>("user");
           />
         )}
       </div>
+      {partPickerItemId ? (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/35 p-0 sm:items-center sm:p-6">
+          <div className="max-h-[82vh] w-full overflow-hidden rounded-t-xl bg-white shadow-xl sm:mx-auto sm:max-w-lg sm:rounded-xl">
+            <div className="border-b border-[#e2d8cb] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold">Select part</p>
+                  <p className="text-xs text-[#756d61]">Search karo ya complete list me se choose karo.</p>
+                </div>
+                <button
+                  className="rounded-md border border-[#d7cdbf] px-3 py-2 text-sm font-semibold"
+                  onClick={() => setPartPickerItemId(null)}
+                >
+                  Close
+                </button>
+              </div>
+              <input
+                value={pickerItem?.name || ""}
+                onChange={(event) => partPickerItemId && typePartName(partPickerItemId, event.target.value)}
+                className="input mt-3"
+                autoFocus
+                placeholder="Search parts..."
+              />
+            </div>
+            <div className="max-h-[58vh] overflow-y-auto p-3">
+              {(filteredParts.length ? filteredParts : store.parts).map((part) => (
+                <button
+                  key={part.id}
+                  onClick={() => {
+                    pickPart(partPickerItemId, part.name);
+                    setPartPickerItemId(null);
+                  }}
+                  className="mb-2 flex w-full items-center justify-between rounded-lg border border-[#e2d8cb] bg-[#fbfaf7] p-3 text-left"
+                >
+                  <span>
+                    <span className="block font-semibold">{part.name}</span>
+                    <span className="block text-xs text-[#756d61]">HSN {part.hsn || "-"} · {money(part.price)}</span>
+                  </span>
+                  <span className="text-sm font-bold text-[#1f4f46]">Select</span>
+                </button>
+              ))}
+              {!store.parts.length ? (
+                <p className="rounded-lg bg-[#f7f4ef] p-4 text-sm text-[#756d61]">No saved parts. Admin panel se parts add karo.</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

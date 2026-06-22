@@ -3,6 +3,7 @@
 import {
   BadgeIndianRupee,
   Building2,
+  Car,
   Download,
   FileText,
   LogOut,
@@ -20,9 +21,10 @@ import {
 } from "lucide-react";
 import jsPDF from "jspdf";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 type Role = "user" | "admin";
+type ItemType = "part" | "labour";
 
 type Company = {
   name: string;
@@ -59,7 +61,9 @@ type Part = {
   id: string;
   name: string;
   price: number;
-  hsn: string;
+  partNumber: string;
+  hsn?: string;
+  type?: ItemType;
 };
 
 type LineItem = {
@@ -67,7 +71,10 @@ type LineItem = {
   name: string;
   qty: number;
   price: number;
-  hsn: string;
+  partNumber: string;
+  hsn?: string;
+  type: ItemType;
+  batch?: string;
 };
 
 type Template = {
@@ -84,6 +91,20 @@ type Customer = {
   vehicle?: string;
 };
 
+type JobDetails = {
+  registrationNo: string;
+  jobCardNo: string;
+  jobCardDate: string;
+  model: string;
+  chassisNo: string;
+  mileage: string;
+  serviceAdvisor: string;
+  serviceType: string;
+  placeOfSupply: string;
+  pan: string;
+  customerGstin: string;
+};
+
 type Store = {
   company: Company;
   admin: AdminAccount;
@@ -96,20 +117,21 @@ type Store = {
 };
 
 const defaultCompany: Company = {
-  name: "Ayaan Auto Works",
-  address: "Main Road, Auto Market, Pune",
-  phone: "+91 98765 43210",
-  email: "billing@ayaanauto.in",
-  logoText: "AAW",
+  name: "CAR MECHANIC",
+  address: "Plot No. H-98 Sarita Vihar, Kalindi Kunj, New Delhi 110025",
+  phone: "+91 97187 17540",
+  email: "carmechanic99722@gmail.com",
+  logoText: "CM",
+  logoUrl: "/WhatsApp%20Image%202026-06-22%20at%2016.05.29%20(1).jpeg",
   whatsappMessage:
-    "Namaste {name}, aapka invoice {invoiceNo} ready hai. Total amount Rs {total}. Dhanyavaad.",
+    "Namaste {name}, CAR MECHANIC invoice {invoiceNo} ready hai. Total amount Rs {total}. Dhanyavaad.",
 };
 
 const defaultGstProfiles: GstProfile[] = [
   {
-    id: "gst-1",
-    label: "Main GST",
-    gstNumber: "27ABCDE1234F1Z5",
+    id: "gst-car-mechanic",
+    label: "CAR MECHANIC GST",
+    gstNumber: "07AARFC9099A1Z2",
     taxRate: 18,
     enabled: true,
   },
@@ -132,45 +154,32 @@ const defaultAdmin: AdminAccount = {
 };
 
 const defaultParts: Part[] = [
-  { id: "p1", name: "Brake shoe", price: 850, hsn: "8708" },
-  { id: "p2", name: "Brake pad", price: 1250, hsn: "8708" },
-  { id: "p3", name: "Engine oil 10W-40", price: 1450, hsn: "2710" },
-  { id: "p4", name: "Oil filter", price: 350, hsn: "8421" },
-  { id: "p5", name: "Air filter", price: 450, hsn: "8421" },
-  { id: "p6", name: "Spark plug", price: 220, hsn: "8511" },
-  { id: "p7", name: "Clutch cable", price: 420, hsn: "8708" },
-  { id: "p8", name: "Chain sprocket kit", price: 1850, hsn: "8714" },
-  { id: "p9", name: "Battery check", price: 250, hsn: "9987" },
-  { id: "p10", name: "General service labour", price: 700, hsn: "9987" },
-  { id: "p11", name: "Wheel alignment", price: 600, hsn: "9987" },
-  { id: "p12", name: "Puncture repair", price: 120, hsn: "9987" },
+  { id: "p1", name: "Gasket", price: 10.16, partNumber: "09168M14012", type: "part" },
+  { id: "p2", name: "Element, air cleaner", price: 406.77, partNumber: "13780M50R00", type: "part" },
+  { id: "p3", name: "Filter assy, oil", price: 88.98, partNumber: "16510M65L10", type: "part" },
+  { id: "p4", name: "Paper floor mat", price: 2.54, partNumber: "99000M24121-137", type: "part" },
+  { id: "p5", name: "Super long life coolant", price: 317.79, partNumber: "99000M24121-246", type: "part" },
+  { id: "p6", name: "Grease sachet, caliper pin", price: 16.94, partNumber: "99000M25010", type: "part" },
+  { id: "p7", name: "PMS - 1P 20K", price: 1625, partNumber: "ZE61L0P", type: "labour" },
+  { id: "p8", name: "Front brake caliper assy", price: 408, partNumber: "MK02R0", type: "labour" },
+  { id: "p9", name: "Wheel alignment", price: 440, partNumber: "ZA11L0", type: "labour" },
 ];
 
 const seedStore: Store = {
   company: defaultCompany,
   admin: defaultAdmin,
   gstProfiles: defaultGstProfiles,
-  activeGstId: "gst-1",
+  activeGstId: "gst-car-mechanic",
   users: defaultUsers,
   parts: defaultParts,
   templates: [
     {
       id: "t1",
-      keyword: "brakeshoe change",
-      title: "Brake shoe change",
+      keyword: "periodic maintenance",
+      title: "Periodic maintenance service",
       items: [
-        { id: "i1", name: "Brake shoe", qty: 1, price: 850, hsn: "8708" },
-        { id: "i2", name: "General service labour", qty: 1, price: 350, hsn: "9987" },
-      ],
-    },
-    {
-      id: "t2",
-      keyword: "oil service",
-      title: "Oil service",
-      items: [
-        { id: "i3", name: "Engine oil 10W-40", qty: 1, price: 1450, hsn: "2710" },
-        { id: "i4", name: "Oil filter", qty: 1, price: 350, hsn: "8421" },
-        { id: "i5", name: "General service labour", qty: 1, price: 500, hsn: "9987" },
+        { id: "i1", name: "Filter assy, oil", qty: 1, price: 88.98, partNumber: "16510M65L10", type: "part" },
+        { id: "i2", name: "PMS - 1P 20K", qty: 1, price: 1625, partNumber: "ZE61L0P", type: "labour" },
       ],
     },
   ],
@@ -178,8 +187,29 @@ const seedStore: Store = {
 };
 
 const emptyCustomer: Customer = { name: "", phone: "", email: "", vehicle: "" };
-const newItem = (): LineItem => ({ id: crypto.randomUUID(), name: "", qty: 1, price: 0, hsn: "" });
-const invoiceNumber = () => `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+const emptyJobDetails: JobDetails = {
+  registrationNo: "",
+  jobCardNo: "",
+  jobCardDate: "",
+  model: "",
+  chassisNo: "",
+  mileage: "",
+  serviceAdvisor: "",
+  serviceType: "Periodic Maintenance Service",
+  placeOfSupply: "DELHI",
+  pan: "",
+  customerGstin: "",
+};
+const newItem = (): LineItem => ({
+  id: crypto.randomUUID(),
+  name: "",
+  qty: 1,
+  price: 0,
+  partNumber: "",
+  type: "part",
+  batch: "",
+});
+const invoiceNumber = () => `BR/${new Date().getFullYear().toString().slice(-2)}${Date.now().toString().slice(-6)}`;
 const emptyUser: AppUser = { id: "", name: "", phone: "", pin: "", active: true };
 const emptyGst: GstProfile = { id: "", label: "", gstNumber: "", taxRate: 18, enabled: true };
 
@@ -192,7 +222,7 @@ function money(value: number) {
 }
 
 function pdfMoney(value: number) {
-  return `Rs ${Number(value || 0).toFixed(2)}`;
+  return Number(value || 0).toFixed(2);
 }
 
 function imageToDataUrl(blob: Blob) {
@@ -204,23 +234,43 @@ function imageToDataUrl(blob: Blob) {
   });
 }
 
-function loadStore(): Store {
-  if (typeof window === "undefined") return seedStore;
-  const raw = localStorage.getItem("mechanic-invoice-store");
-  if (!raw) return seedStore;
-  const parsed = JSON.parse(raw) as Partial<Store> & {
-    company?: Partial<Company> & { gstNumber?: string; taxRate?: number; gstEnabled?: boolean };
+function normalizePart(part: Partial<Part>): Part {
+  return {
+    id: part.id || crypto.randomUUID(),
+    name: part.name || "",
+    price: Number(part.price || 0),
+    partNumber: part.partNumber || part.hsn || "",
+    hsn: part.hsn,
+    type: part.type || "part",
   };
+}
+
+function normalizeItem(item: Partial<LineItem>): LineItem {
+  return {
+    id: item.id || crypto.randomUUID(),
+    name: item.name || "",
+    qty: Number(item.qty || 1),
+    price: Number(item.price || 0),
+    partNumber: item.partNumber || item.hsn || "",
+    hsn: item.hsn,
+    type: item.type || "part",
+    batch: item.batch || "",
+  };
+}
+
+function normalizeStore(input: Partial<Store> | null | undefined): Store {
+  const parsed = input || {};
+  const oldCompany = parsed.company as (Partial<Company> & { gstNumber?: string; taxRate?: number; gstEnabled?: boolean }) | undefined;
   const migratedGst =
     parsed.gstProfiles?.length
       ? parsed.gstProfiles
       : [
           {
-            id: "gst-1",
-            label: "Main GST",
-            gstNumber: parsed.company?.gstNumber || defaultGstProfiles[0].gstNumber,
-            taxRate: parsed.company?.taxRate ?? defaultGstProfiles[0].taxRate,
-            enabled: parsed.company?.gstEnabled ?? true,
+            id: "gst-car-mechanic",
+            label: "CAR MECHANIC GST",
+            gstNumber: oldCompany?.gstNumber || defaultGstProfiles[0].gstNumber,
+            taxRate: oldCompany?.taxRate ?? defaultGstProfiles[0].taxRate,
+            enabled: oldCompany?.gstEnabled ?? true,
           },
           defaultGstProfiles[1],
         ];
@@ -230,17 +280,35 @@ function loadStore(): Store {
     ...parsed,
     company: { ...defaultCompany, ...parsed.company },
     admin: { ...defaultAdmin, ...parsed.admin },
-    gstProfiles: migratedGst,
-    activeGstId: parsed.activeGstId || migratedGst[0].id,
+    gstProfiles: migratedGst.map((gst) => ({ ...gst, gstNumber: gst.gstNumber || "" })),
+    activeGstId: parsed.activeGstId || migratedGst[0]?.id || defaultGstProfiles[0].id,
     users: parsed.users?.length ? parsed.users : defaultUsers,
-    parts: parsed.parts?.length ? parsed.parts : defaultParts,
-    templates: parsed.templates?.length ? parsed.templates : seedStore.templates,
+    parts: parsed.parts?.length ? parsed.parts.map(normalizePart) : defaultParts,
+    templates: parsed.templates?.length
+      ? parsed.templates.map((template) => ({
+          ...template,
+          items: template.items.map(normalizeItem),
+        }))
+      : seedStore.templates,
     customers: parsed.customers || [],
   };
 }
 
+function loadStore(): Store {
+  if (typeof window === "undefined") return seedStore;
+  const raw = localStorage.getItem("mechanic-invoice-store");
+  return raw ? normalizeStore(JSON.parse(raw)) : seedStore;
+}
+
 function getActiveGst(store: Store) {
   return store.gstProfiles.find((gst) => gst.id === store.activeGstId) || store.gstProfiles[0] || defaultGstProfiles[0];
+}
+
+function splitItems(items: LineItem[]) {
+  return {
+    parts: items.filter((item) => item.type === "part"),
+    labour: items.filter((item) => item.type === "labour"),
+  };
 }
 
 export default function Home() {
@@ -254,10 +322,11 @@ export default function Home() {
   const [dbReady, setDbReady] = useState(false);
   const [active, setActive] = useState<"invoice" | "admin">("invoice");
   const [customer, setCustomer] = useState<Customer>(emptyCustomer);
+  const [jobDetails, setJobDetails] = useState<JobDetails>(emptyJobDetails);
   const [items, setItems] = useState<LineItem[]>([newItem()]);
   const [invoiceNo, setInvoiceNo] = useState(invoiceNumber);
   const [templateSearch, setTemplateSearch] = useState("");
-  const [newPart, setNewPart] = useState<Part>({ id: "", name: "", price: 0, hsn: "" });
+  const [newPart, setNewPart] = useState<Part>({ id: "", name: "", price: 0, partNumber: "", type: "part" });
   const [newUser, setNewUser] = useState<AppUser>(emptyUser);
   const [newGst, setNewGst] = useState<GstProfile>(emptyGst);
   const [partPickerItemId, setPartPickerItemId] = useState<string | null>(null);
@@ -269,7 +338,7 @@ export default function Home() {
     fetch("/api/store")
       .then((response) => response.json())
       .then((data: { store?: Store | null }) => {
-        if (data.store) setStore({ ...seedStore, ...data.store });
+        if (data.store) setStore(normalizeStore(data.store));
       })
       .catch(() => null)
       .finally(() => setDbReady(true));
@@ -291,7 +360,15 @@ export default function Home() {
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.price || 0), 0);
     const tax = activeGst.enabled ? (subtotal * activeGst.taxRate) / 100 : 0;
-    return { subtotal, tax, total: subtotal + tax };
+    const total = subtotal + tax;
+    return {
+      subtotal,
+      tax,
+      cgst: activeGst.enabled ? tax / 2 : 0,
+      sgst: activeGst.enabled ? tax / 2 : 0,
+      total,
+      rounded: Math.round(total),
+    };
   }, [items, activeGst.enabled, activeGst.taxRate]);
 
   const matchedTemplates = store.templates.filter((template) =>
@@ -299,8 +376,10 @@ export default function Home() {
   );
   const pickerItem = items.find((item) => item.id === partPickerItemId);
   const pickerQuery = pickerItem?.name.trim().toLowerCase() || "";
-  const filteredParts = store.parts.filter((part) =>
-    `${part.name} ${part.hsn}`.toLowerCase().includes(pickerQuery),
+  const pickerType: ItemType = pickerItem?.type || "part";
+  const pickerOptions = store.parts.filter((part) => (part.type || "part") === pickerType);
+  const filteredParts = pickerOptions.filter((part) =>
+    `${part.name} ${part.partNumber}`.toLowerCase().includes(pickerQuery),
   );
 
   function login() {
@@ -329,13 +408,17 @@ export default function Home() {
     updateItem(itemId, {
       name: partName,
       price: part?.price ?? 0,
-      hsn: part?.hsn ?? "",
+      partNumber: part?.partNumber ?? "",
+      type: part?.type || "part",
     });
   }
 
   function typePartName(itemId: string, partName: string) {
     const part = store.parts.find((entry) => entry.name.toLowerCase() === partName.toLowerCase());
-    updateItem(itemId, part ? { name: part.name, price: part.price, hsn: part.hsn } : { name: partName });
+    updateItem(
+      itemId,
+      part ? { name: part.name, price: part.price, partNumber: part.partNumber, type: part.type || "part" } : { name: partName },
+    );
   }
 
   function findCustomer(phone: string) {
@@ -361,7 +444,7 @@ export default function Home() {
   }
 
   function applyTemplate(template: Template) {
-    setItems(template.items.map((item) => ({ ...item, id: crypto.randomUUID() })));
+    setItems(template.items.map((item) => ({ ...normalizeItem(item), id: crypto.randomUUID() })));
     setTemplateSearch(template.keyword);
   }
 
@@ -382,56 +465,191 @@ export default function Home() {
   }
 
   async function createPdf() {
-    const doc = new jsPDF();
-    const company = store.company;
-    if (company.logoUrl) {
+    const doc = new jsPDF({ unit: "pt", format: [864, 1080] });
+    const pageWidth = 864;
+    const margin = 44;
+    const tableWidth = pageWidth - margin * 2;
+    const sectioned = splitItems(items);
+
+    doc.setFont("courier", "bold");
+    doc.setFontSize(10);
+    doc.text("ORIGINAL FOR RECIPIENT/DUPLICATE FOR TRANSPORTER/TRIPLICATE FOR SUPPLIER", pageWidth / 2, 28, { align: "center" });
+    doc.setFillColor(205, 205, 205);
+    doc.rect(margin, 54, tableWidth, 21, "F");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(16);
+    doc.text("Job Card Retail - Tax Invoice", pageWidth / 2, 70, { align: "center" });
+
+    if (store.company.logoUrl) {
       try {
-        const logoBlob = await fetch(company.logoUrl).then((response) => response.blob());
+        const logoBlob = await fetch(store.company.logoUrl).then((response) => response.blob());
         const logoData = await imageToDataUrl(logoBlob);
-        doc.addImage(logoData, "PNG", 14, 10, 18, 18);
+        doc.addImage(logoData, "PNG", margin, 92, 46, 46);
       } catch {
-        doc.setFillColor(31, 79, 70);
-        doc.rect(14, 10, 18, 18, "F");
+        doc.setFillColor(200, 20, 20);
+        doc.rect(margin, 92, 46, 46, "F");
       }
+    } else {
+      doc.setFillColor(200, 20, 20);
+      doc.rect(margin, 92, 46, 46, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text(store.company.logoText, margin + 23, 121, { align: "center" });
+      doc.setTextColor(0, 0, 0);
     }
-    doc.setFontSize(18);
-    doc.text(company.name, company.logoUrl ? 36 : 14, 18);
-    doc.setFontSize(10);
-    doc.text(company.address, company.logoUrl ? 36 : 14, 25);
-    doc.text(`Phone: ${company.phone}  Email: ${company.email}`, 14, 34);
-    doc.text(activeGst.enabled ? `GSTIN: ${activeGst.gstNumber}` : "Without GST bill", 14, 37);
+
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.text("Tax Invoice", 150, 18);
+    doc.text(store.company.name, margin + 56, 106);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(store.company.address, margin + 56, 121, { maxWidth: 280 });
+    doc.text(`${store.company.phone} | ${store.company.email}`, margin + 56, 144);
+    doc.text(activeGst.enabled ? `Dealer GSTIN : ${activeGst.gstNumber}` : "Without GST bill", margin + 56, 158);
+
+    const y = 206;
     doc.setFontSize(10);
-    doc.text(`Invoice: ${invoiceNo}`, 150, 26);
-    doc.text(`Date: ${new Date().toLocaleDateString("en-IN")}`, 150, 32);
-    doc.text(`Customer: ${customer.name}`, 14, 50);
-    doc.text(`Phone: ${customer.phone}`, 14, 56);
-    doc.text(`Vehicle: ${customer.vehicle || "-"}`, 14, 62);
-    doc.line(14, 70, 196, 70);
-    doc.text("Item", 14, 78);
-    doc.text("HSN", 95, 78);
-    doc.text("Qty", 120, 78);
-    doc.text("Rate", 140, 78);
-    doc.text("Amount", 170, 78);
-    let y = 86;
-    items.forEach((item) => {
-      const amount = Number(item.qty) * Number(item.price);
-      doc.text(item.name || "Custom item", 14, y);
-      doc.text(item.hsn || "-", 95, y);
-      doc.text(String(item.qty), 122, y);
-      doc.text(String(item.price), 140, y);
-      doc.text(String(amount), 172, y);
-      y += 8;
+    const leftRows = [
+      ["Customer Name & Address", customer.name || "-"],
+      ["Mobile", customer.phone || "-"],
+      ["Email", customer.email || "-"],
+      ["Customer GSTIN/UIN", jobDetails.customerGstin || "N/A"],
+      ["PAN", jobDetails.pan || "N/A"],
+    ];
+    const rightRows = [
+      ["Invoice No.", invoiceNo],
+      ["Date", new Date().toLocaleString("en-IN")],
+      ["Job Card No.", jobDetails.jobCardNo || "-"],
+      ["Job Card Date", jobDetails.jobCardDate || "-"],
+      ["Reg.No.", jobDetails.registrationNo || customer.vehicle || "-"],
+      ["Model", jobDetails.model || "-"],
+      ["Chassis No.", jobDetails.chassisNo || "-"],
+      ["Mileage", jobDetails.mileage || "-"],
+      ["SA Name", jobDetails.serviceAdvisor || "-"],
+      ["Service type", jobDetails.serviceType || "-"],
+      ["Place of Supply", jobDetails.placeOfSupply || "-"],
+    ];
+    leftRows.forEach((row, index) => {
+      doc.text(`${row[0]} :`, margin, y + index * 16);
+      doc.text(row[1], margin + 130, y + index * 16, { maxWidth: 210 });
     });
-    doc.line(14, y, 196, y);
-    y += 10;
-    doc.text(`Subtotal: ${pdfMoney(totals.subtotal)}`, 140, y);
-    y += 7;
-    doc.text(`GST ${activeGst.enabled ? activeGst.taxRate : 0}%: ${pdfMoney(totals.tax)}`, 140, y);
-    y += 7;
+    rightRows.forEach((row, index) => {
+      const x = index < 5 ? 390 : 610;
+      const rowY = y + (index < 5 ? index : index - 5) * 16;
+      doc.text(`${row[0]} :`, x, rowY);
+      doc.text(row[1], x + 82, rowY, { maxWidth: 150 });
+    });
+
+    const tableTop = 410;
+    doc.setFillColor(204, 204, 204);
+    doc.rect(margin, tableTop, tableWidth, 38, "F");
+    doc.setDrawColor(0, 0, 0);
+    doc.rect(margin, tableTop, tableWidth, 38);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    const cols = [
+      ["Srl.", margin + 2],
+      ["Part Number", margin + 34],
+      ["Description", margin + 138],
+      ["Batch", margin + 300],
+      ["Tax", margin + 392],
+      ["Qty.", margin + 446],
+      ["Rate", margin + 520],
+      ["Taxable\nAmount", margin + 580],
+      ["Tax Paid\nAmount", margin + 672],
+      ["Labour\nCharges", margin + 750],
+    ] as const;
+    cols.forEach(([label, xPos]) => doc.text(label, xPos, tableTop + 17));
+
+    let rowY = tableTop + 52;
+    let serial = 1;
+    const drawSection = (title: string, rows: LineItem[]) => {
+      if (!rows.length) return;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text(title, margin + 2, rowY);
+      doc.line(margin, rowY + 4, margin + tableWidth, rowY + 4);
+      rowY += 17;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text("Demanded Repairs-Others/Suggested Jobs", margin + 2, rowY);
+      rowY += 16;
+      rows.forEach((item) => {
+        const amount = item.qty * item.price;
+        const tax = activeGst.enabled ? (amount * activeGst.taxRate) / 100 : 0;
+        doc.text(String(serial), margin + 2, rowY);
+        doc.text(item.partNumber || "-", margin + 34, rowY);
+        doc.text(item.name || "Custom item", margin + 138, rowY, { maxWidth: 150 });
+        doc.text(item.batch || "-", margin + 300, rowY);
+        doc.text(`${activeGst.enabled ? activeGst.taxRate : 0}%`, margin + 392, rowY);
+        doc.text(item.qty.toFixed(3), margin + 446, rowY);
+        doc.text(pdfMoney(item.price), margin + 520, rowY, { align: "right" });
+        doc.text(item.type === "part" ? pdfMoney(amount) : "0.00", margin + 640, rowY, { align: "right" });
+        doc.text(pdfMoney(tax), margin + 720, rowY, { align: "right" });
+        doc.text(item.type === "labour" ? pdfMoney(amount) : "0.00", margin + 820, rowY, { align: "right" });
+        rowY += 16;
+        serial += 1;
+      });
+      doc.line(margin, rowY + 2, margin + tableWidth, rowY + 2);
+      rowY += 18;
+    };
+
+    drawSection("Parts", sectioned.parts);
+    drawSection("Labour", sectioned.labour);
+
+    const totalsY = Math.max(rowY + 70, 720);
+    doc.line(margin, totalsY - 24, pageWidth - margin, totalsY - 24);
+    doc.setFontSize(11);
+    doc.text("Recommendations :", margin, totalsY - 10);
+    doc.line(310, totalsY - 22, 310, totalsY + 148);
+    doc.setFont("helvetica", "normal");
+    const partSubtotal = sectioned.parts.reduce((sum, item) => sum + item.qty * item.price, 0);
+    const labourSubtotal = sectioned.labour.reduce((sum, item) => sum + item.qty * item.price, 0);
+    const partTax = activeGst.enabled ? (partSubtotal * activeGst.taxRate) / 100 : 0;
+    const labourTax = activeGst.enabled ? (labourSubtotal * activeGst.taxRate) / 100 : 0;
+    const totalRows: Array<[string, number, number]> = [
+      ["Sub Total Amount", partSubtotal, labourSubtotal],
+      ["Less Discount on Parts & Labour", 0, 0],
+      [`CGST @ ${activeGst.enabled ? activeGst.taxRate / 2 : 0}%`, partTax / 2, labourTax / 2],
+      [`SGST @ ${activeGst.enabled ? activeGst.taxRate / 2 : 0}%`, partTax / 2, labourTax / 2],
+      ["Sub Total Amount", partSubtotal + partTax, labourSubtotal + labourTax],
+      ["Net Bill Amount (Rounded)", 0, totals.rounded],
+    ];
+    totalRows.forEach((row, index) => {
+      const yy = totalsY + index * 17;
+      doc.text(row[0], 318, yy);
+      doc.text(":", 585, yy);
+      doc.text(pdfMoney(row[1]), 650, yy, { align: "right" });
+      doc.text(pdfMoney(row[2]), 820, yy, { align: "right" });
+      if (index === 4) doc.line(318, yy - 11, 820, yy - 11);
+    });
+    doc.setFont("helvetica", "bold");
+    doc.text(`For ${store.company.name}`, 170, totalsY + 65, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.text("Authorised Signatory", 170, totalsY + 92, { align: "center" });
+
+    const footerY = 910;
+    doc.line(margin, footerY - 22, pageWidth - margin, footerY - 22);
+    doc.setFontSize(8);
+    doc.text(
+      "I acknowledge that the jobs/repairs/service carried out in my vehicle and estimates were explained to me. I confirm completion of repairs to my satisfaction.",
+      margin,
+      footerY,
+      { maxWidth: 520 },
+    );
     doc.setFontSize(12);
-    doc.text(`Total: ${pdfMoney(totals.total)}`, 140, y);
+    doc.text("Customer Signature", 585, footerY + 20);
+    doc.text("Mobile No.", 720, footerY + 20);
+    doc.setFillColor(210, 210, 210);
+    doc.rect(margin, footerY + 76, tableWidth, 20, "F");
+    doc.text("Gate Pass", pageWidth / 2, footerY + 91, { align: "center" });
+    doc.setFontSize(10);
+    doc.text(`GP No. : ${jobDetails.jobCardNo || "-"}`, margin, footerY + 116);
+    doc.text(`Cust. Name : ${customer.name || "-"}`, margin, footerY + 132);
+    doc.text(`Reg.No. : ${jobDetails.registrationNo || customer.vehicle || "-"}`, 330, footerY + 132);
+    doc.text(`Bill No. : ${invoiceNo}`, 610, footerY + 116);
+    doc.text(`Amount : ${pdfMoney(totals.rounded)}`, 720, footerY + 116);
     return doc;
   }
 
@@ -442,7 +660,7 @@ export default function Home() {
     const message = store.company.whatsappMessage
       .replaceAll("{name}", customer.name)
       .replaceAll("{invoiceNo}", invoiceNo)
-      .replaceAll("{total}", money(totals.total));
+      .replaceAll("{total}", money(totals.rounded));
 
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({ title: invoiceNo, text: message, files: [file] });
@@ -454,38 +672,39 @@ export default function Home() {
 
   if (!role) {
     return (
-      <main className="min-h-screen bg-[#f7f4ef] text-[#191713]">
+      <main className="car-bg-login min-h-screen text-white">
         <section className="mx-auto grid min-h-screen max-w-6xl items-center gap-8 px-4 py-8 md:grid-cols-[1fr_420px]">
           <div className="space-y-6">
-            <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-[#1f4f46] text-xl font-bold text-white">
-              MI
-            </div>
+            {store.company.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={store.company.logoUrl} alt="" className="h-24 w-24 rounded-md bg-white object-contain p-2 shadow-2xl" />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-md bg-[#d3121c] text-xl font-black text-white">
+                {store.company.logoText}
+              </div>
+            )}
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-[#9b3d22]">Mechanic Invoice PWA</p>
-              <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight md:text-6xl">
-                Workshop billing, GST invoice, templates, WhatsApp share.
+              <p className="text-sm font-semibold uppercase tracking-wide text-[#ff2b35]">CAR MECHANIC</p>
+              <h1 className="mt-3 max-w-2xl text-4xl font-black leading-tight md:text-6xl">
+                Job-card invoices for serious workshop billing.
               </h1>
-            </div>
-            <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
-              {["Fixed GST for users", "Admin controls", "Mobile PWA"].map((label) => (
-                <div key={label} className="rounded-lg border border-[#ded6ca] bg-white/70 p-4 text-sm font-medium">
-                  {label}
-                </div>
-              ))}
+              <p className="mt-4 max-w-xl text-sm text-zinc-300">
+                GST, parts, labour, vehicle details, PDF invoice, and WhatsApp sharing in one red-black workshop console.
+              </p>
             </div>
           </div>
-          <div className="rounded-lg border border-[#d7cdbf] bg-white p-5 shadow-sm">
+          <div className="rounded-lg border border-zinc-800 bg-[#111]/90 p-5 shadow-2xl backdrop-blur">
             <div className="mb-5 flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-[#1f4f46]" />
+              <ShieldCheck className="h-5 w-5 text-[#ff2b35]" />
               <h2 className="text-xl font-semibold">Login</h2>
             </div>
-            <div className="mb-4 grid grid-cols-2 rounded-lg bg-[#f0ebe3] p-1">
+            <div className="mb-4 grid grid-cols-2 rounded-md bg-black p-1">
               {(["user", "admin"] as Role[]).map((entry) => (
                 <button
                   key={entry}
                   onClick={() => setLoginRole(entry)}
-                  className={`rounded-md px-4 py-2 text-sm font-semibold capitalize ${
-                    loginRole === entry ? "bg-white shadow-sm" : "text-[#756d61]"
+                  className={`rounded px-4 py-2 text-sm font-semibold capitalize ${
+                    loginRole === entry ? "bg-[#d3121c] text-white" : "text-zinc-400"
                   }`}
                 >
                   {entry}
@@ -495,18 +714,13 @@ export default function Home() {
             {loginRole === "admin" ? (
               <>
                 <label className="block text-sm font-medium">Username</label>
-                <input
-                  value={adminUsername}
-                  onChange={(event) => setAdminUsername(event.target.value)}
-                  className="mt-2 h-11 w-full rounded-md border border-[#d7cdbf] px-3 outline-none focus:border-[#1f4f46]"
-                  placeholder="Enter username"
-                />
+                <input value={adminUsername} onChange={(event) => setAdminUsername(event.target.value)} className="input mt-2" placeholder="Enter username" />
                 <label className="mt-3 block text-sm font-medium">Password</label>
                 <input
                   value={adminPassword}
                   onChange={(event) => setAdminPassword(event.target.value)}
                   onKeyDown={(event) => event.key === "Enter" && login()}
-                  className="mt-2 h-11 w-full rounded-md border border-[#d7cdbf] px-3 outline-none focus:border-[#1f4f46]"
+                  className="input mt-2"
                   placeholder="Enter password"
                   type="password"
                 />
@@ -514,27 +728,22 @@ export default function Home() {
             ) : (
               <>
                 <label className="mt-3 block text-sm font-medium">User phone</label>
-                <input
-                  value={loginPhone}
-                  onChange={(event) => setLoginPhone(event.target.value)}
-                  className="mt-2 h-11 w-full rounded-md border border-[#d7cdbf] px-3 outline-none focus:border-[#1f4f46]"
-                  placeholder="Enter phone"
-                />
+                <input value={loginPhone} onChange={(event) => setLoginPhone(event.target.value)} className="input mt-2" placeholder="Enter phone" />
                 <label className="mt-3 block text-sm font-medium">PIN</label>
                 <input
                   value={pin}
                   onChange={(event) => setPin(event.target.value)}
                   onKeyDown={(event) => event.key === "Enter" && login()}
-                  className="mt-2 h-11 w-full rounded-md border border-[#d7cdbf] px-3 outline-none focus:border-[#1f4f46]"
+                  className="input mt-2"
                   placeholder="Enter PIN"
                   type="password"
                 />
               </>
             )}
-            <button onClick={login} className="mt-4 h-11 w-full rounded-md bg-[#1f4f46] font-semibold text-white">
+            <button onClick={login} className="btn-primary mt-4 w-full">
               Continue
             </button>
-            {status ? <p className="mt-3 text-sm text-[#9b3d22]">{status}</p> : null}
+            {status ? <p className="mt-3 text-sm text-[#ff525a]">{status}</p> : null}
           </div>
         </section>
       </main>
@@ -542,82 +751,83 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f4ef] text-[#191713]">
-      <header className="sticky top-0 z-10 border-b border-[#ddd4c8] bg-[#f7f4ef]/95 backdrop-blur">
+    <main className="car-bg-app min-h-screen text-zinc-100">
+      <header className="sticky top-0 z-10 border-b border-zinc-800 bg-black/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             {store.company.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={store.company.logoUrl} alt="" className="h-10 w-10 rounded-md bg-white object-contain p-1" />
             ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-[#1f4f46] font-bold text-white">
+              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-[#d3121c] font-black text-white">
                 {store.company.logoText}
               </div>
             )}
             <div>
-              <p className="font-semibold">{store.company.name}</p>
-              <p className="text-xs text-[#756d61]">
+              <p className="font-bold">{store.company.name}</p>
+              <p className="text-xs text-zinc-400">
                 {role === "admin" ? "Admin panel" : activeGst.enabled ? `GSTIN ${activeGst.gstNumber}` : "Without GST"}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setActive("invoice")} className="rounded-md p-2 hover:bg-[#eee6db]" title="Invoice">
+            <button onClick={() => setActive("invoice")} className="rounded-md p-2 hover:bg-zinc-900" title="Invoice">
               <FileText className="h-5 w-5" />
             </button>
             {role === "admin" ? (
-              <button onClick={() => setActive("admin")} className="rounded-md p-2 hover:bg-[#eee6db]" title="Admin">
+              <button onClick={() => setActive("admin")} className="rounded-md p-2 hover:bg-zinc-900" title="Admin">
                 <Settings className="h-5 w-5" />
               </button>
             ) : null}
-            <button onClick={() => setRole(null)} className="rounded-md p-2 hover:bg-[#eee6db]" title="Logout">
+            <button onClick={() => setRole(null)} className="rounded-md p-2 hover:bg-zinc-900" title="Logout">
               <LogOut className="h-5 w-5" />
             </button>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[1fr_340px]">
+      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[1fr_390px]">
         {active === "invoice" ? (
           <>
             <section className="space-y-4">
               <Panel icon={<UserRound />} title="Customer">
                 <div className="grid gap-3 md:grid-cols-4">
-                  <Field label="Phone *">
-                    <input value={customer.phone} onChange={(event) => findCustomer(event.target.value)} className="input" />
-                  </Field>
-                  <Field label="Name *">
-                    <input value={customer.name} onChange={(event) => setCustomer({ ...customer, name: event.target.value })} className="input" />
-                  </Field>
-                  <Field label="Email">
-                    <input value={customer.email || ""} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} className="input" />
-                  </Field>
-                  <Field label="Vehicle">
-                    <input value={customer.vehicle || ""} onChange={(event) => setCustomer({ ...customer, vehicle: event.target.value })} className="input" />
-                  </Field>
+                  <Field label="Phone *"><input value={customer.phone} onChange={(event) => findCustomer(event.target.value)} className="input" /></Field>
+                  <Field label="Name *"><input value={customer.name} onChange={(event) => setCustomer({ ...customer, name: event.target.value })} className="input" /></Field>
+                  <Field label="Email"><input value={customer.email || ""} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} className="input" /></Field>
+                  <Field label="Vehicle"><input value={customer.vehicle || ""} onChange={(event) => setCustomer({ ...customer, vehicle: event.target.value })} className="input" /></Field>
+                </div>
+              </Panel>
+
+              <Panel icon={<Car />} title="Vehicle and job card">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <Field label="Registration no."><input value={jobDetails.registrationNo} onChange={(e) => setJobDetails({ ...jobDetails, registrationNo: e.target.value.toUpperCase() })} className="input" /></Field>
+                  <Field label="Job card no."><input value={jobDetails.jobCardNo} onChange={(e) => setJobDetails({ ...jobDetails, jobCardNo: e.target.value })} className="input" /></Field>
+                  <Field label="Job card date"><input type="date" value={jobDetails.jobCardDate} onChange={(e) => setJobDetails({ ...jobDetails, jobCardDate: e.target.value })} className="input" /></Field>
+                  <Field label="Model"><input value={jobDetails.model} onChange={(e) => setJobDetails({ ...jobDetails, model: e.target.value.toUpperCase() })} className="input" /></Field>
+                  <Field label="Chassis no."><input value={jobDetails.chassisNo} onChange={(e) => setJobDetails({ ...jobDetails, chassisNo: e.target.value })} className="input" /></Field>
+                  <Field label="Mileage"><input value={jobDetails.mileage} onChange={(e) => setJobDetails({ ...jobDetails, mileage: e.target.value })} className="input" /></Field>
+                  <Field label="Service advisor"><input value={jobDetails.serviceAdvisor} onChange={(e) => setJobDetails({ ...jobDetails, serviceAdvisor: e.target.value })} className="input" /></Field>
+                  <Field label="Service type"><input value={jobDetails.serviceType} onChange={(e) => setJobDetails({ ...jobDetails, serviceType: e.target.value })} className="input" /></Field>
+                  <Field label="Place of supply"><input value={jobDetails.placeOfSupply} onChange={(e) => setJobDetails({ ...jobDetails, placeOfSupply: e.target.value.toUpperCase() })} className="input" /></Field>
+                  <Field label="PAN"><input value={jobDetails.pan} onChange={(e) => setJobDetails({ ...jobDetails, pan: e.target.value.toUpperCase() })} className="input" /></Field>
+                  <Field label="Customer GSTIN/UIN"><input value={jobDetails.customerGstin} onChange={(e) => setJobDetails({ ...jobDetails, customerGstin: e.target.value.toUpperCase() })} className="input" /></Field>
                 </div>
               </Panel>
 
               <Panel icon={<Search />} title="Template">
                 <div className="flex flex-col gap-3 md:flex-row">
-                  <input
-                    value={templateSearch}
-                    onChange={(event) => setTemplateSearch(event.target.value)}
-                    className="input"
-                    placeholder="brakeshoe change, oil service..."
-                  />
-                  <button onClick={saveTemplate} className="btn-secondary">
-                    <Save className="h-4 w-4" /> Save current
-                  </button>
+                  <input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} className="input" placeholder="periodic maintenance..." />
+                  <button onClick={saveTemplate} className="btn-secondary"><Save className="h-4 w-4" /> Save current</button>
                 </div>
                 {templateSearch ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {matchedTemplates.map((template) => (
-                      <button key={template.id} onClick={() => applyTemplate(template)} className="rounded-md bg-[#e6efe9] px-3 py-2 text-sm font-medium text-[#1f4f46]">
+                      <button key={template.id} onClick={() => applyTemplate(template)} className="rounded-md bg-[#2a0d10] px-3 py-2 text-sm font-medium text-[#ff525a]">
                         {template.title}
                       </button>
                     ))}
-                    {!matchedTemplates.length ? <span className="text-sm text-[#756d61]">No template. Current items save kar sakte ho.</span> : null}
+                    {!matchedTemplates.length ? <span className="text-sm text-zinc-400">No template. Current items save kar sakte ho.</span> : null}
                   </div>
                 ) : null}
               </Panel>
@@ -625,126 +835,92 @@ export default function Home() {
               <Panel icon={<PackagePlus />} title="Invoice items">
                 <div className="space-y-3">
                   {items.map((item) => (
-                    <div key={item.id} className="grid gap-2 rounded-lg border border-[#e2d8cb] bg-[#fbfaf7] p-3 md:grid-cols-[1fr_90px_120px_90px_40px]">
-                      <div>
-                        <div className="flex gap-2">
-                          <input
-                            value={item.name}
-                            onChange={(event) => typePartName(item.id, event.target.value)}
-                            onFocus={() => setPartPickerItemId(item.id)}
-                            className="input"
-                            placeholder="Part or custom item"
-                          />
-                          <button
-                            onClick={() => setPartPickerItemId(item.id)}
-                            className="rounded-md border border-[#d7cdbf] bg-white px-3 text-[#1f4f46]"
-                            title="Search parts"
-                          >
-                            <Search className="h-4 w-4" />
-                          </button>
-                        </div>
+                    <div key={item.id} className="grid gap-2 rounded-lg border border-zinc-800 bg-[#111] p-3 md:grid-cols-[110px_1fr_130px_100px_100px_44px]">
+                      <select value={item.type} onChange={(event) => updateItem(item.id, { type: event.target.value as ItemType })} className="input">
+                        <option value="part">Part</option>
+                        <option value="labour">Labour</option>
+                      </select>
+                      <div className="flex gap-2">
+                        <input value={item.name} onChange={(event) => typePartName(item.id, event.target.value)} onFocus={() => setPartPickerItemId(item.id)} className="input" placeholder="Part or labour item" />
+                        <button onClick={() => setPartPickerItemId(item.id)} className="rounded-md border border-zinc-700 bg-black px-3 text-[#ff2b35]" title="Search parts">
+                          <Search className="h-4 w-4" />
+                        </button>
                       </div>
-                      <input value={item.hsn} onChange={(event) => updateItem(item.id, { hsn: event.target.value })} className="input" placeholder="HSN" />
+                      <input value={item.partNumber} onChange={(event) => updateItem(item.id, { partNumber: event.target.value })} className="input" placeholder="Part Number" />
                       <input type="number" value={item.price} onChange={(event) => updateItem(item.id, { price: Number(event.target.value) })} className="input" placeholder="Rate" />
                       <input type="number" value={item.qty} onChange={(event) => updateItem(item.id, { qty: Number(event.target.value) })} className="input" placeholder="Qty" />
-                      <button onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))} className="rounded-md p-2 text-[#9b3d22] hover:bg-[#f4e0d8]" title="Remove">
+                      <button onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))} className="rounded-md p-2 text-[#ff525a] hover:bg-[#2a0d10]" title="Remove">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   ))}
                 </div>
-                <button onClick={() => setItems((current) => [...current, newItem()])} className="mt-3 btn-secondary">
-                  <Plus className="h-4 w-4" /> Add item
-                </button>
+                <button onClick={() => setItems((current) => [...current, newItem()])} className="btn-secondary mt-3"><Plus className="h-4 w-4" /> Add item</button>
               </Panel>
             </section>
 
             <aside className="space-y-4">
               <Panel icon={<BadgeIndianRupee />} title="Summary">
-                <Field label="Invoice no.">
-                  <input value={invoiceNo} onChange={(event) => setInvoiceNo(event.target.value)} className="input" />
-                </Field>
+                <Field label="Invoice no."><input value={invoiceNo} onChange={(event) => setInvoiceNo(event.target.value)} className="input" /></Field>
                 <div className="mt-4 space-y-2 text-sm">
                   <Row label="Subtotal" value={money(totals.subtotal)} />
-                  <Row label={`GST ${activeGst.enabled ? activeGst.taxRate : 0}%`} value={money(totals.tax)} />
-                  <Row label="Total" value={money(totals.total)} strong />
+                  <Row label={`CGST ${activeGst.enabled ? activeGst.taxRate / 2 : 0}%`} value={money(totals.cgst)} />
+                  <Row label={`SGST ${activeGst.enabled ? activeGst.taxRate / 2 : 0}%`} value={money(totals.sgst)} />
+                  <Row label="Rounded total" value={money(totals.rounded)} strong />
                 </div>
                 <div className="mt-4 grid gap-2">
-                  <button onClick={async () => (await createPdf()).save(`${invoiceNo}.pdf`)} className="btn-secondary">
-                    <Download className="h-4 w-4" /> PDF
-                  </button>
-                  <button onClick={shareInvoice} className="btn-primary">
-                    <MessageCircle className="h-4 w-4" /> WhatsApp share
-                  </button>
+                  <button onClick={async () => (await createPdf()).save(`${invoiceNo}.pdf`)} className="btn-secondary"><Download className="h-4 w-4" /> PDF</button>
+                  <button onClick={shareInvoice} className="btn-primary"><MessageCircle className="h-4 w-4" /> WhatsApp share</button>
                 </div>
-                {status ? <p className="mt-3 text-sm text-[#9b3d22]">{status}</p> : null}
+                {status ? <p className="mt-3 text-sm text-[#ff525a]">{status}</p> : null}
               </Panel>
-              <InvoicePreview
-                company={store.company}
-                gst={activeGst}
-                customer={customer}
-                invoiceNo={invoiceNo}
-                items={items}
-                totals={totals}
-              />
+              <InvoicePreview company={store.company} gst={activeGst} customer={customer} jobDetails={jobDetails} invoiceNo={invoiceNo} items={items} totals={totals} />
             </aside>
           </>
         ) : (
-          <AdminPanel
-            store={store}
-            setStore={setStore}
-            newPart={newPart}
-            setNewPart={setNewPart}
-            newUser={newUser}
-            setNewUser={setNewUser}
-            newGst={newGst}
-            setNewGst={setNewGst}
-          />
+          <AdminPanel store={store} setStore={setStore} newPart={newPart} setNewPart={setNewPart} newUser={newUser} setNewUser={setNewUser} newGst={newGst} setNewGst={setNewGst} />
         )}
       </div>
+
       {partPickerItemId ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/35 p-0 sm:items-center sm:p-6">
-          <div className="max-h-[82vh] w-full overflow-hidden rounded-t-xl bg-white shadow-xl sm:mx-auto sm:max-w-lg sm:rounded-xl">
-            <div className="border-b border-[#e2d8cb] p-4">
+        <div className="fixed inset-0 z-50 flex items-end bg-black/70 p-0 sm:items-center sm:p-6">
+          <div className="max-h-[82vh] w-full overflow-hidden rounded-t-xl border border-zinc-800 bg-[#111] shadow-xl sm:mx-auto sm:max-w-lg sm:rounded-xl">
+            <div className="border-b border-zinc-800 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-semibold">Select part</p>
-                  <p className="text-xs text-[#756d61]">Search karo ya complete list me se choose karo.</p>
+                  <p className="font-semibold">Select {pickerType === "part" ? "part" : "labour"}</p>
+                  <p className="text-xs text-zinc-400">Search by name or part number.</p>
                 </div>
-                <button
-                  className="rounded-md border border-[#d7cdbf] px-3 py-2 text-sm font-semibold"
-                  onClick={() => setPartPickerItemId(null)}
-                >
-                  Close
-                </button>
+                <button className="rounded-md border border-zinc-700 px-3 py-2 text-sm font-semibold" onClick={() => setPartPickerItemId(null)}>Close</button>
               </div>
-              <input
-                value={pickerItem?.name || ""}
-                onChange={(event) => partPickerItemId && typePartName(partPickerItemId, event.target.value)}
-                className="input mt-3"
-                autoFocus
-                placeholder="Search parts..."
-              />
+              <input value={pickerItem?.name || ""} onChange={(event) => partPickerItemId && typePartName(partPickerItemId, event.target.value)} className="input mt-3" autoFocus placeholder={`Search ${pickerType === "part" ? "parts" : "labour"}...`} />
             </div>
             <div className="max-h-[58vh] overflow-y-auto p-3">
-              {(filteredParts.length ? filteredParts : store.parts).map((part) => (
+              {(pickerQuery ? filteredParts : pickerOptions).map((part) => (
                 <button
                   key={part.id}
                   onClick={() => {
                     pickPart(partPickerItemId, part.name);
                     setPartPickerItemId(null);
                   }}
-                  className="mb-2 flex w-full items-center justify-between rounded-lg border border-[#e2d8cb] bg-[#fbfaf7] p-3 text-left"
+                  className="mb-2 flex w-full items-center justify-between rounded-lg border border-zinc-800 bg-black p-3 text-left"
                 >
                   <span>
                     <span className="block font-semibold">{part.name}</span>
-                    <span className="block text-xs text-[#756d61]">HSN {part.hsn || "-"} · {money(part.price)}</span>
+                    <span className="block text-xs text-zinc-400">Part Number {part.partNumber || "-"} · {money(part.price)}</span>
                   </span>
-                  <span className="text-sm font-bold text-[#1f4f46]">Select</span>
+                  <span className="text-sm font-bold text-[#ff2b35]">Select</span>
                 </button>
               ))}
-              {!store.parts.length ? (
-                <p className="rounded-lg bg-[#f7f4ef] p-4 text-sm text-[#756d61]">No saved parts. Admin panel se parts add karo.</p>
+              {pickerQuery && !filteredParts.length ? (
+                <p className="rounded-lg border border-zinc-800 bg-black p-4 text-sm text-zinc-400">
+                  No matching {pickerType === "part" ? "parts" : "labour"} found.
+                </p>
+              ) : null}
+              {!pickerOptions.length ? (
+                <p className="rounded-lg border border-zinc-800 bg-black p-4 text-sm text-zinc-400">
+                  No saved {pickerType === "part" ? "parts" : "labour"} found. Admin panel se add karo.
+                </p>
               ) : null}
             </div>
           </div>
@@ -804,77 +980,41 @@ function AdminPanel({
           <Field label="Phone"><input className="input" value={store.company.phone} onChange={(e) => updateCompany({ phone: e.target.value })} /></Field>
           <Field label="Email"><input className="input" value={store.company.email} onChange={(e) => updateCompany({ email: e.target.value })} /></Field>
         </div>
-        <div className="mt-4 grid gap-3 rounded-lg border border-[#e2d8cb] bg-[#fbfaf7] p-3 md:grid-cols-[96px_1fr]">
+        <div className="mt-4 grid gap-3 rounded-lg border border-zinc-800 bg-black p-3 md:grid-cols-[96px_1fr]">
           {store.company.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={store.company.logoUrl} alt="" className="h-24 w-24 rounded-md bg-white object-contain p-2" />
           ) : (
-            <div className="flex h-24 w-24 items-center justify-center rounded-md bg-[#1f4f46] text-xl font-bold text-white">
-              {store.company.logoText}
-            </div>
+            <div className="flex h-24 w-24 items-center justify-center rounded-md bg-[#d3121c] text-xl font-black text-white">{store.company.logoText}</div>
           )}
           <div>
             <p className="text-sm font-semibold">Invoice logo</p>
-            <p className="mt-1 text-xs text-[#756d61]">Logo Cloudinary me upload hoga aur invoice preview/PDF me use hoga.</p>
+            <p className="mt-1 text-xs text-zinc-400">Logo Cloudinary me upload hoga aur invoice preview/PDF me use hoga.</p>
             <label className="btn-secondary mt-3 w-fit">
               <Upload className="h-4 w-4" /> Upload logo
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                className="sr-only"
-                onChange={(event) => uploadLogo(event.target.files?.[0])}
-              />
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="sr-only" onChange={(event) => uploadLogo(event.target.files?.[0])} />
             </label>
-            {store.company.logoUrl ? (
-              <button className="ml-2 rounded-md px-3 py-2 text-sm font-semibold text-[#9b3d22]" onClick={() => updateCompany({ logoUrl: "" })}>
-                Remove
-              </button>
-            ) : null}
-            {logoStatus ? <p className="mt-2 text-xs text-[#756d61]">{logoStatus}</p> : null}
+            {store.company.logoUrl ? <button className="ml-2 rounded-md px-3 py-2 text-sm font-semibold text-[#ff525a]" onClick={() => updateCompany({ logoUrl: "" })}>Remove</button> : null}
+            {logoStatus ? <p className="mt-2 text-xs text-zinc-400">{logoStatus}</p> : null}
           </div>
         </div>
         <Field label="Address"><textarea className="input min-h-20 py-2" value={store.company.address} onChange={(e) => updateCompany({ address: e.target.value })} /></Field>
-        <Field label="WhatsApp message">
-          <textarea className="input min-h-24 py-2" value={store.company.whatsappMessage} onChange={(e) => updateCompany({ whatsappMessage: e.target.value })} />
-        </Field>
-        <p className="mt-2 text-xs text-[#756d61]">Variables: {"{name}"} {"{invoiceNo}"} {"{total}"}</p>
-        <div className="mt-4 grid gap-3 rounded-lg border border-[#e2d8cb] bg-[#fbfaf7] p-3 md:grid-cols-2">
-          <Field label="Admin username">
-            <input className="input" value={store.admin.username} onChange={(e) => updateAdmin({ username: e.target.value })} />
-          </Field>
-          <Field label="Admin password">
-            <input className="input" type="password" value={store.admin.password} onChange={(e) => updateAdmin({ password: e.target.value })} />
-          </Field>
+        <Field label="WhatsApp message"><textarea className="input min-h-24 py-2" value={store.company.whatsappMessage} onChange={(e) => updateCompany({ whatsappMessage: e.target.value })} /></Field>
+        <p className="mt-2 text-xs text-zinc-400">Variables: {"{name}"} {"{invoiceNo}"} {"{total}"}</p>
+        <div className="mt-4 grid gap-3 rounded-lg border border-zinc-800 bg-black p-3 md:grid-cols-2">
+          <Field label="Admin username"><input className="input" value={store.admin.username} onChange={(e) => updateAdmin({ username: e.target.value })} /></Field>
+          <Field label="Admin password"><input className="input" type="password" value={store.admin.password} onChange={(e) => updateAdmin({ password: e.target.value })} /></Field>
         </div>
       </Panel>
 
       <Panel icon={<ShieldCheck />} title="GST master">
         <Field label="Active GST profile">
-          <select
-            className="input"
-            value={store.activeGstId}
-            onChange={(event) => setStore((current) => ({ ...current, activeGstId: event.target.value }))}
-          >
-            {store.gstProfiles.map((gst) => (
-              <option key={gst.id} value={gst.id}>
-                {gst.label} {gst.enabled ? `- ${gst.gstNumber}` : "- Without GST"}
-              </option>
-            ))}
+          <select className="input" value={store.activeGstId} onChange={(event) => setStore((current) => ({ ...current, activeGstId: event.target.value }))}>
+            {store.gstProfiles.map((gst) => <option key={gst.id} value={gst.id}>{gst.label} {gst.enabled ? `- ${gst.gstNumber}` : "- Without GST"}</option>)}
           </select>
         </Field>
         <label className="mt-4 flex items-center gap-2 text-sm font-semibold">
-          <input
-            type="checkbox"
-            checked={activeGst.enabled}
-            onChange={(event) =>
-              setStore((current) => ({
-                ...current,
-                gstProfiles: current.gstProfiles.map((gst) =>
-                  gst.id === current.activeGstId ? { ...gst, enabled: event.target.checked } : gst,
-                ),
-              }))
-            }
-          />
+          <input type="checkbox" checked={activeGst.enabled} onChange={(event) => setStore((current) => ({ ...current, gstProfiles: current.gstProfiles.map((gst) => gst.id === current.activeGstId ? { ...gst, enabled: event.target.checked } : gst) }))} />
           Add GST on invoices
         </label>
         <div className="mt-3 grid gap-2">
@@ -882,49 +1022,26 @@ function AdminPanel({
           <input className="input" placeholder="GST number" value={newGst.gstNumber} onChange={(e) => setNewGst({ ...newGst, gstNumber: e.target.value.toUpperCase() })} />
           <div className="grid grid-cols-2 gap-2">
             <input className="input" type="number" placeholder="Tax %" value={newGst.taxRate} onChange={(e) => setNewGst({ ...newGst, taxRate: Number(e.target.value) })} />
-            <label className="flex items-center gap-2 rounded-md border border-[#d7cdbf] px-3 text-sm font-semibold">
-              <input type="checkbox" checked={newGst.enabled} onChange={(e) => setNewGst({ ...newGst, enabled: e.target.checked })} />
-              GST
-            </label>
+            <label className="flex items-center gap-2 rounded-md border border-zinc-700 px-3 text-sm font-semibold"><input type="checkbox" checked={newGst.enabled} onChange={(e) => setNewGst({ ...newGst, enabled: e.target.checked })} />GST</label>
           </div>
-          <button
-            className="btn-primary"
-            onClick={() => {
-              if (!newGst.label.trim()) return;
-              const profile = { ...newGst, id: crypto.randomUUID(), taxRate: newGst.enabled ? Number(newGst.taxRate || 0) : 0 };
-              setStore((current) => ({
-                ...current,
-                gstProfiles: [profile, ...current.gstProfiles],
-                activeGstId: profile.id,
-              }));
-              setNewGst(emptyGst);
-            }}
-          >
-            <Plus className="h-4 w-4" /> Save GST
-          </button>
+          <button className="btn-primary" onClick={() => {
+            if (!newGst.label.trim()) return;
+            const profile = { ...newGst, id: crypto.randomUUID(), taxRate: newGst.enabled ? Number(newGst.taxRate || 0) : 0 };
+            setStore((current) => ({ ...current, gstProfiles: [profile, ...current.gstProfiles], activeGstId: profile.id }));
+            setNewGst(emptyGst);
+          }}><Plus className="h-4 w-4" /> Save GST</button>
         </div>
         <div className="mt-4 space-y-2">
           {store.gstProfiles.map((gst) => (
-            <div key={gst.id} className="flex items-center justify-between rounded-md border border-[#e2d8cb] bg-[#fbfaf7] p-3 text-sm">
-              <button
-                className="text-left"
-                onClick={() => setStore((current) => ({ ...current, activeGstId: gst.id }))}
-              >
+            <div key={gst.id} className="flex items-center justify-between rounded-md border border-zinc-800 bg-black p-3 text-sm">
+              <button className="text-left" onClick={() => setStore((current) => ({ ...current, activeGstId: gst.id }))}>
                 <p className="font-semibold">{gst.label}</p>
-                <p className="text-[#756d61]">{gst.enabled ? `${gst.gstNumber} - ${gst.taxRate}%` : "Without GST"}</p>
+                <p className="text-zinc-400">{gst.enabled ? `${gst.gstNumber} - ${gst.taxRate}%` : "Without GST"}</p>
               </button>
-              <button
-                onClick={() =>
-                  setStore((current) => {
-                    const next = current.gstProfiles.filter((entry) => entry.id !== gst.id);
-                    return { ...current, gstProfiles: next.length ? next : [defaultGstProfiles[1]], activeGstId: next[0]?.id || defaultGstProfiles[1].id };
-                  })
-                }
-                className="rounded-md p-2 text-[#9b3d22] hover:bg-[#f4e0d8]"
-                title="Delete GST"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <button onClick={() => setStore((current) => {
+                const next = current.gstProfiles.filter((entry) => entry.id !== gst.id);
+                return { ...current, gstProfiles: next.length ? next : [defaultGstProfiles[1]], activeGstId: next[0]?.id || defaultGstProfiles[1].id };
+              })} className="rounded-md p-2 text-[#ff525a] hover:bg-[#2a0d10]" title="Delete GST"><Trash2 className="h-4 w-4" /></button>
             </div>
           ))}
         </div>
@@ -935,45 +1052,19 @@ function AdminPanel({
           <input className="input" placeholder="User name" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} />
           <input className="input" placeholder="Phone" value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} />
           <input className="input" placeholder="PIN" value={newUser.pin} onChange={(e) => setNewUser({ ...newUser, pin: e.target.value })} />
-          <button
-            className="btn-primary"
-            onClick={() => {
-              if (!newUser.name.trim() || !newUser.phone.trim() || !newUser.pin.trim()) return;
-              setStore((current) => ({
-                ...current,
-                users: [
-                  { ...newUser, id: crypto.randomUUID(), active: true },
-                  ...current.users.filter((user) => user.phone.replace(/\D/g, "") !== newUser.phone.replace(/\D/g, "")),
-                ],
-              }));
-              setNewUser(emptyUser);
-            }}
-          >
-            <Plus className="h-4 w-4" /> Add user
-          </button>
+          <button className="btn-primary" onClick={() => {
+            if (!newUser.name.trim() || !newUser.phone.trim() || !newUser.pin.trim()) return;
+            setStore((current) => ({ ...current, users: [{ ...newUser, id: crypto.randomUUID(), active: true }, ...current.users.filter((user) => user.phone.replace(/\D/g, "") !== newUser.phone.replace(/\D/g, ""))] }));
+            setNewUser(emptyUser);
+          }}><Plus className="h-4 w-4" /> Add user</button>
         </div>
         <div className="mt-4 space-y-2">
           {store.users.map((user) => (
-            <div key={user.id} className="flex items-center justify-between rounded-md border border-[#e2d8cb] bg-[#fbfaf7] p-3 text-sm">
-              <div>
-                <p className="font-semibold">{user.name}</p>
-                <p className="text-[#756d61]">{user.phone} - PIN {user.pin}</p>
-              </div>
+            <div key={user.id} className="flex items-center justify-between rounded-md border border-zinc-800 bg-black p-3 text-sm">
+              <div><p className="font-semibold">{user.name}</p><p className="text-zinc-400">{user.phone} - PIN {user.pin}</p></div>
               <div className="flex items-center gap-1">
-                <button
-                  onClick={() =>
-                    setStore((current) => ({
-                      ...current,
-                      users: current.users.map((entry) => (entry.id === user.id ? { ...entry, active: !entry.active } : entry)),
-                    }))
-                  }
-                  className="rounded-md border border-[#d7cdbf] px-2 py-1 text-xs font-semibold"
-                >
-                  {user.active ? "Active" : "Off"}
-                </button>
-                <button onClick={() => setStore((current) => ({ ...current, users: current.users.filter((entry) => entry.id !== user.id) }))} className="rounded-md p-2 text-[#9b3d22] hover:bg-[#f4e0d8]" title="Remove">
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <button onClick={() => setStore((current) => ({ ...current, users: current.users.map((entry) => entry.id === user.id ? { ...entry, active: !entry.active } : entry) }))} className="rounded-md border border-zinc-700 px-2 py-1 text-xs font-semibold">{user.active ? "Active" : "Off"}</button>
+                <button onClick={() => setStore((current) => ({ ...current, users: current.users.filter((entry) => entry.id !== user.id) }))} className="rounded-md p-2 text-[#ff525a] hover:bg-[#2a0d10]" title="Remove"><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
           ))}
@@ -982,35 +1073,23 @@ function AdminPanel({
 
       <Panel icon={<PackagePlus />} title="Parts master">
         <div className="grid gap-2">
-          <input className="input" placeholder="Part name" value={newPart.name} onChange={(e) => setNewPart({ ...newPart, name: e.target.value })} />
-          <div className="grid grid-cols-2 gap-2">
+          <input className="input" placeholder="Part/labour name" value={newPart.name} onChange={(e) => setNewPart({ ...newPart, name: e.target.value })} />
+          <div className="grid grid-cols-3 gap-2">
+            <select className="input" value={newPart.type || "part"} onChange={(e) => setNewPart({ ...newPart, type: e.target.value as ItemType })}><option value="part">Part</option><option value="labour">Labour</option></select>
             <input className="input" placeholder="Price" type="number" value={newPart.price} onChange={(e) => setNewPart({ ...newPart, price: Number(e.target.value) })} />
-            <input className="input" placeholder="HSN" value={newPart.hsn} onChange={(e) => setNewPart({ ...newPart, hsn: e.target.value })} />
+            <input className="input" placeholder="Part Number" value={newPart.partNumber} onChange={(e) => setNewPart({ ...newPart, partNumber: e.target.value })} />
           </div>
-          <button
-            className="btn-primary"
-            onClick={() => {
-              if (!newPart.name.trim()) return;
-              setStore((current) => ({
-                ...current,
-                parts: [{ ...newPart, id: crypto.randomUUID() }, ...current.parts],
-              }));
-              setNewPart({ id: "", name: "", price: 0, hsn: "" });
-            }}
-          >
-            <Plus className="h-4 w-4" /> Add part
-          </button>
+          <button className="btn-primary" onClick={() => {
+            if (!newPart.name.trim()) return;
+            setStore((current) => ({ ...current, parts: [normalizePart({ ...newPart, id: crypto.randomUUID() }), ...current.parts] }));
+            setNewPart({ id: "", name: "", price: 0, partNumber: "", type: "part" });
+          }}><Plus className="h-4 w-4" /> Add item</button>
         </div>
         <div className="mt-4 max-h-[520px] space-y-2 overflow-auto">
           {store.parts.map((part) => (
-            <div key={part.id} className="flex items-center justify-between rounded-md border border-[#e2d8cb] bg-[#fbfaf7] p-3 text-sm">
-              <div>
-                <p className="font-semibold">{part.name}</p>
-                <p className="text-[#756d61]">{part.hsn} · {money(part.price)}</p>
-              </div>
-              <button onClick={() => setStore((current) => ({ ...current, parts: current.parts.filter((entry) => entry.id !== part.id) }))} className="rounded-md p-2 text-[#9b3d22] hover:bg-[#f4e0d8]" title="Remove">
-                <Trash2 className="h-4 w-4" />
-              </button>
+            <div key={part.id} className="flex items-center justify-between rounded-md border border-zinc-800 bg-black p-3 text-sm">
+              <div><p className="font-semibold">{part.name}</p><p className="text-zinc-400">{part.type || "part"} · {part.partNumber} · {money(part.price)}</p></div>
+              <button onClick={() => setStore((current) => ({ ...current, parts: current.parts.filter((entry) => entry.id !== part.id) }))} className="rounded-md p-2 text-[#ff525a] hover:bg-[#2a0d10]" title="Remove"><Trash2 className="h-4 w-4" /></button>
             </div>
           ))}
         </div>
@@ -1023,6 +1102,7 @@ function InvoicePreview({
   company,
   gst,
   customer,
+  jobDetails,
   invoiceNo,
   items,
   totals,
@@ -1030,82 +1110,106 @@ function InvoicePreview({
   company: Company;
   gst: GstProfile;
   customer: Customer;
+  jobDetails: JobDetails;
   invoiceNo: string;
   items: LineItem[];
-  totals: { subtotal: number; tax: number; total: number };
+  totals: { subtotal: number; tax: number; cgst: number; sgst: number; total: number; rounded: number };
 }) {
+  const sectioned = splitItems(items);
+  const rows = [...sectioned.parts, ...sectioned.labour];
+
   return (
-    <div className="overflow-hidden rounded-lg border border-[#d7cdbf] bg-white shadow-sm">
-      <div className="border-b border-[#e8dfd4] bg-[#182f2b] px-4 py-3 text-white">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            {company.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={company.logoUrl} alt="" className="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1" />
-            ) : (
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-white text-sm font-black text-[#182f2b]">
-                {company.logoText}
-              </div>
-            )}
-            <div>
-              <p className="text-base font-bold">{company.name}</p>
-              <p className="text-xs text-white/75">{company.phone}</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-xs uppercase tracking-wide text-white/60">Invoice</p>
-            <p className="font-mono text-sm font-semibold">{invoiceNo}</p>
-          </div>
-        </div>
+    <div className="overflow-hidden rounded-lg border border-zinc-800 bg-white text-black shadow-sm">
+      <div className="bg-black px-4 py-3 text-white">
+        <p className="text-center font-mono text-[10px] uppercase tracking-wide text-zinc-300">Original for recipient / Duplicate for transporter / Triplicate for supplier</p>
+        <div className="mt-2 bg-zinc-300 py-1 text-center text-lg font-semibold text-black">Job Card Retail - Tax Invoice</div>
       </div>
-      <div className="space-y-4 p-4">
-        <div className="grid gap-3 text-xs sm:grid-cols-2">
-          <div className="rounded-md bg-[#f7f4ef] p-3">
-            <p className="mb-1 font-bold text-[#756d61]">Bill To</p>
-            <p className="font-semibold">{customer.name || "Customer name"}</p>
-            <p>{customer.phone || "Phone number"}</p>
-            <p>{customer.vehicle || "Vehicle details"}</p>
+      <div className="space-y-4 p-4 text-xs">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <p className="font-bold">{company.name}</p>
+            <p>{company.address}</p>
+            <p>{company.phone}</p>
+            <p>{company.email}</p>
+            <p>{gst.enabled ? `Dealer GSTIN: ${gst.gstNumber}` : "Without GST bill"}</p>
           </div>
-          <div className="rounded-md bg-[#f7f4ef] p-3">
-            <p className="mb-1 font-bold text-[#756d61]">Tax Profile</p>
-            <p className="font-semibold">{gst.label}</p>
-            <p>{gst.enabled ? gst.gstNumber : "Without GST"}</p>
-            <p>{gst.enabled ? `${gst.taxRate}% GST` : "No tax added"}</p>
+          <div className="text-left sm:text-right">
+            <p>Invoice No. : {invoiceNo}</p>
+            <p>Date : {new Date().toLocaleDateString("en-IN")}</p>
+            <p>Job Card No. : {jobDetails.jobCardNo || "-"}</p>
+            <p>Reg.No. : {jobDetails.registrationNo || customer.vehicle || "-"}</p>
+            <p>Model : {jobDetails.model || "-"}</p>
           </div>
         </div>
-        <div className="overflow-hidden rounded-md border border-[#e8dfd4]">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#f0ebe3] text-[#756d61]">
+        <div className="grid gap-3 border-y border-zinc-300 py-3 sm:grid-cols-2">
+          <div>
+            <p className="font-semibold">Customer Name & Address</p>
+            <p>{customer.name || "-"}</p>
+            <p>Mobile : {customer.phone || "-"}</p>
+            <p>Cust GSTIN/UIN : {jobDetails.customerGstin || "N/A"}</p>
+            <p>PAN : {jobDetails.pan || "N/A"}</p>
+          </div>
+          <div>
+            <p>SA Name : {jobDetails.serviceAdvisor || "-"}</p>
+            <p>Mileage : {jobDetails.mileage || "-"}</p>
+            <p>Chassis No. : {jobDetails.chassisNo || "-"}</p>
+            <p>Service type : {jobDetails.serviceType || "-"}</p>
+            <p>Place of Supply : {jobDetails.placeOfSupply || "-"}</p>
+          </div>
+        </div>
+        <div className="overflow-auto border border-zinc-400">
+          <table className="min-w-[720px] w-full text-left text-[11px]">
+            <thead className="bg-zinc-300">
               <tr>
-                <th className="px-3 py-2">Description</th>
-                <th className="px-2 py-2">Qty</th>
-                <th className="px-2 py-2 text-right">Rate</th>
-                <th className="px-3 py-2 text-right">Amount</th>
+                <th className="p-1">Srl.</th>
+                <th className="p-1">Part Number</th>
+                <th className="p-1">Description</th>
+                <th className="p-1">Tax</th>
+                <th className="p-1">Qty.</th>
+                <th className="p-1 text-right">Rate</th>
+                <th className="p-1 text-right">Taxable Amount</th>
+                <th className="p-1 text-right">Tax Paid Amount</th>
+                <th className="p-1 text-right">Labour Charges</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-t border-[#eee8df]">
-                  <td className="px-3 py-2">
-                    <p className="font-medium">{item.name || "Custom item"}</p>
-                    <p className="text-[#756d61]">HSN {item.hsn || "-"}</p>
-                  </td>
-                  <td className="px-2 py-2">{item.qty || 0}</td>
-                  <td className="px-2 py-2 text-right">{money(item.price || 0)}</td>
-                  <td className="px-3 py-2 text-right font-semibold">{money((item.qty || 0) * (item.price || 0))}</td>
-                </tr>
+              {(["part", "labour"] as ItemType[]).map((type) => (
+                <Fragment key={type}>
+                  <tr><td colSpan={9} className="border-y border-zinc-400 bg-zinc-100 p-1 font-bold capitalize">{type === "part" ? "Parts" : "Labour"}</td></tr>
+                  {rows.filter((item) => item.type === type).map((item, index) => {
+                    const amount = item.qty * item.price;
+                    const tax = gst.enabled ? (amount * gst.taxRate) / 100 : 0;
+                    return (
+                      <tr key={item.id} className="border-t border-zinc-200">
+                        <td className="p-1">{index + 1}</td>
+                        <td className="p-1">{item.partNumber || "-"}</td>
+                        <td className="p-1">{item.name || "Custom item"}</td>
+                        <td className="p-1">{gst.enabled ? gst.taxRate : 0}%</td>
+                        <td className="p-1">{item.qty}</td>
+                        <td className="p-1 text-right">{pdfMoney(item.price)}</td>
+                        <td className="p-1 text-right">{item.type === "part" ? pdfMoney(amount) : "0.00"}</td>
+                        <td className="p-1 text-right">{pdfMoney(tax)}</td>
+                        <td className="p-1 text-right">{item.type === "labour" ? pdfMoney(amount) : "0.00"}</td>
+                      </tr>
+                    );
+                  })}
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="ml-auto max-w-56 space-y-2 text-sm">
-          <Row label="Subtotal" value={money(totals.subtotal)} />
-          <Row label={`GST ${gst.enabled ? gst.taxRate : 0}%`} value={money(totals.tax)} />
-          <Row label="Grand Total" value={money(totals.total)} strong />
+        <div className="ml-auto max-w-sm space-y-1 text-sm">
+          <Row label="Sub Total Amount" value={money(totals.subtotal)} />
+          <Row label={`CGST @ ${gst.enabled ? gst.taxRate / 2 : 0}%`} value={money(totals.cgst)} />
+          <Row label={`SGST @ ${gst.enabled ? gst.taxRate / 2 : 0}%`} value={money(totals.sgst)} />
+          <Row label="Net Bill Amount (Rounded)" value={money(totals.rounded)} strong />
         </div>
-        <div className="rounded-md bg-[#f7f4ef] p-3 text-xs text-[#756d61]">
-          <p className="font-semibold text-[#191713]">Thank you for your business.</p>
-          <p>{company.address}</p>
+        <div className="grid gap-3 border-t border-zinc-300 pt-3 text-xs sm:grid-cols-2">
+          <p>I acknowledge that the jobs/repairs/service carried out in my vehicle were explained to me.</p>
+          <div className="text-right">
+            <p>Customer Signature</p>
+            <p className="mt-4">Authorised Signatory</p>
+          </div>
         </div>
       </div>
     </div>
@@ -1114,10 +1218,10 @@ function InvoicePreview({
 
 function Panel({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[#d7cdbf] bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-zinc-800 bg-[#111] p-4 shadow-sm">
       <div className="mb-4 flex items-center gap-2">
-        <span className="text-[#1f4f46] [&>svg]:h-5 [&>svg]:w-5">{icon}</span>
-        <h2 className="font-semibold">{title}</h2>
+        <span className="text-[#ff2b35] [&>svg]:h-5 [&>svg]:w-5">{icon}</span>
+        <h2 className="font-semibold text-white">{title}</h2>
       </div>
       {children}
     </div>
@@ -1126,7 +1230,7 @@ function Panel({ icon, title, children }: { icon: React.ReactNode; title: string
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block text-sm font-medium">
+    <label className="block text-sm font-medium text-zinc-200">
       <span className="mb-1 mt-3 block">{label}</span>
       {children}
     </label>
@@ -1135,7 +1239,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`flex items-center justify-between ${strong ? "border-t border-[#ddd4c8] pt-3 text-lg font-bold" : ""}`}>
+    <div className={`flex items-center justify-between ${strong ? "border-t border-zinc-300 pt-3 text-lg font-bold" : ""}`}>
       <span>{label}</span>
       <span>{value}</span>
     </div>

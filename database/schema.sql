@@ -54,6 +54,8 @@ create table if not exists parts (
   name text not null unique,
   price numeric(12, 2) not null default 0,
   hsn text,
+  part_number text,
+  item_type text not null default 'part' check (item_type in ('part', 'labour')),
   created_at timestamptz not null default now()
 );
 

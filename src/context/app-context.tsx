@@ -30,8 +30,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
-    setRoleState(loadRole())
-    setHydrated(true)
+    queueMicrotask(() => {
+      setRoleState(loadRole())
+      setHydrated(true)
+    })
   }, [])
 
   useEffect(() => {

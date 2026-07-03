@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { AppProvider } from "@/context/app-context";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,12 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mechanic Invoice Generator",
-  description: "GST invoice generator for mechanic workshops",
+  title: "CAR MECHANIC | Car Service & Repair in New Delhi",
+  description: "Professional multi-brand car service, repair, diagnostics, and invoice support by Mr Waseem Khan.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Mechanic Invoice",
+    title: "CAR MECHANIC",
     statusBarStyle: "default",
   },
 };
@@ -40,9 +39,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col overflow-x-hidden">
-        <AppProvider>{children}</AppProvider>
-      </body>
+      <body className="flex min-h-full flex-col overflow-x-hidden">{children}</body>
     </html>
   );
 }

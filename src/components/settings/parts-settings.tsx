@@ -27,12 +27,12 @@ export function PartsSettings() {
       </div>
       <div className="mt-4 max-h-[min(520px,55vh)] space-y-2 overflow-y-auto sm:max-h-[520px]">
         {store.parts.map((part) => (
-          <div key={part.id} className="flex flex-col gap-3 rounded-md border border-zinc-800 bg-black p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div key={part.id} className="flex flex-col gap-3 rounded-md border border-slate-200 bg-[#f8fbfa] p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="font-semibold">{part.name}</p>
-              <p className="break-all text-zinc-400 sm:truncate">{part.type || "part"} · {part.partNumber} · {money(part.price)}</p>
+              <p className="break-all text-slate-500 sm:truncate">{part.type || "part"} · {part.partNumber} · {money(part.price)}</p>
             </div>
-            <button onClick={() => setStore((current) => ({ ...current, parts: current.parts.filter((entry) => entry.id !== part.id) }))} className="self-end rounded-md p-2 text-[#ff525a] hover:bg-[#2a0d10] sm:self-auto" title="Remove" aria-label="Remove part"><Trash2 className="h-4 w-4" /></button>
+            <button onClick={() => setStore((current) => ({ ...current, parts: current.parts.filter((entry) => entry.id !== part.id) }))} className="self-end rounded-md p-2 text-red-600 hover:bg-red-50 sm:self-auto" title="Remove" aria-label="Remove part"><Trash2 className="h-4 w-4" /></button>
           </div>
         ))}
       </div>

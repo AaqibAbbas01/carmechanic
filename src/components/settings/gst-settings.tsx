@@ -26,7 +26,7 @@ export function GstSettings() {
         <input className="input" placeholder="GST number" value={newGst.gstNumber} onChange={(e) => setNewGst({ ...newGst, gstNumber: e.target.value.toUpperCase() })} />
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <input className="input" type="number" placeholder="Tax %" value={newGst.taxRate} onChange={(e) => setNewGst({ ...newGst, taxRate: Number(e.target.value) })} />
-          <label className="flex min-h-[2.75rem] items-center gap-2 rounded-md border border-zinc-700 px-3 text-sm font-semibold"><input type="checkbox" className="h-4 w-4" checked={newGst.enabled} onChange={(e) => setNewGst({ ...newGst, enabled: e.target.checked })} />GST</label>
+          <label className="flex min-h-[2.75rem] items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-semibold"><input type="checkbox" className="h-4 w-4" checked={newGst.enabled} onChange={(e) => setNewGst({ ...newGst, enabled: e.target.checked })} />GST</label>
         </div>
         <button className="btn-primary w-full sm:w-auto" onClick={() => {
           if (!newGst.label.trim()) return
@@ -37,15 +37,15 @@ export function GstSettings() {
       </div>
       <div className="mt-4 space-y-2">
         {store.gstProfiles.map((gst) => (
-          <div key={gst.id} className="flex flex-col gap-3 rounded-md border border-zinc-800 bg-black p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div key={gst.id} className="flex flex-col gap-3 rounded-md border border-slate-200 bg-[#f8fbfa] p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <button className="min-w-0 text-left" onClick={() => setStore((current) => ({ ...current, activeGstId: gst.id }))}>
               <p className="font-semibold">{gst.label}</p>
-              <p className="break-all text-zinc-400 sm:truncate">{gst.enabled ? `${gst.gstNumber} - ${gst.taxRate}%` : "Without GST"}</p>
+              <p className="break-all text-slate-500 sm:truncate">{gst.enabled ? `${gst.gstNumber} - ${gst.taxRate}%` : "Without GST"}</p>
             </button>
             <button onClick={() => setStore((current) => {
               const next = current.gstProfiles.filter((entry) => entry.id !== gst.id)
               return { ...current, gstProfiles: next.length ? next : [defaultGstProfiles[1]], activeGstId: next[0]?.id || defaultGstProfiles[1].id }
-            })} className="self-end rounded-md p-2 text-[#ff525a] hover:bg-[#2a0d10] sm:self-auto" title="Delete GST" aria-label="Delete GST"><Trash2 className="h-4 w-4" /></button>
+            })} className="self-end rounded-md p-2 text-red-600 hover:bg-red-50 sm:self-auto" title="Delete GST" aria-label="Delete GST"><Trash2 className="h-4 w-4" /></button>
           </div>
         ))}
       </div>

@@ -2,10 +2,10 @@ import type React from "react"
 
 export function Panel({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-lg border border-zinc-800 bg-[#111] p-3 shadow-sm sm:p-4">
+    <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <div className="mb-3 flex items-center gap-2 sm:mb-4">
-        <span className="shrink-0 text-[#ff2b35] [&>svg]:h-5 [&>svg]:w-5">{icon}</span>
-        <h2 className="min-w-0 text-base font-semibold text-white sm:text-lg">{title}</h2>
+        <span className="shrink-0 text-[#1f6f64] [&>svg]:h-5 [&>svg]:w-5">{icon}</span>
+        <h2 className="min-w-0 text-base font-semibold text-slate-950 sm:text-lg">{title}</h2>
       </div>
       {children}
     </div>
@@ -14,7 +14,7 @@ export function Panel({ icon, title, children }: { icon: React.ReactNode; title:
 
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block min-w-0 text-sm font-medium text-zinc-200">
+    <label className="block min-w-0 text-sm font-medium text-slate-700">
       <span className="mb-1 mt-1 block sm:mt-3">{label}</span>
       {children}
     </label>

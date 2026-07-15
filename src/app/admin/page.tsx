@@ -2,8 +2,13 @@
 
 import {
   BadgeIndianRupee,
+  Bot,
+  CalendarClock,
   Car,
   Download,
+  FileText,
+  FilePlus2,
+  Inbox,
   MessageCircle,
   PackagePlus,
   Plus,
@@ -14,7 +19,7 @@ import {
   UserRound,
 } from "lucide-react";
 import jsPDF from "jspdf";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { AppHeader } from "@/components/app-header";
 import { Field, Panel, Row } from "@/components/ui";
 import { useApp } from "@/context/app-context";
@@ -25,6 +30,7 @@ import {
   customerWhatsAppUrl,
   normalizeCustomerPhone,
   emptyJobDetails,
+  estimateNumber,
   imageToDataUrl,
   invoiceNumber,
   money,
@@ -34,13 +40,19 @@ import {
   splitItems,
   type Company,
   type Customer,
+  type BookingStatus,
+  type EnquiryStatus,
   type GstProfile,
   type ItemType,
   type JobDetails,
   type LineItem,
   type Role,
+  type SlotBooking,
   type Template,
+  type WebsiteEnquiry,
 } from "@/lib/invoice-store";
+
+type AdminTab = "invoice" | "estimate" | "enquiries" | "bookings";
 
 export default function Home() {
   const { store, setStore, role, setRole, activeGst } = useApp();
@@ -58,6 +70,16 @@ export default function Home() {
   const [templatePopupQuery, setTemplatePopupQuery] = useState("");
   const [partPickerItemId, setPartPickerItemId] = useState<string | null>(null);
   const [status, setStatus] = useState("");
+  const [activeTab, setActiveTab] = useState<AdminTab>("invoice");
+  const [estimateCustomer, setEstimateCustomer] = useState<Customer>(emptyCustomer);
+  const [estimateJobDetails, setEstimateJobDetails] = useState<JobDetails>(emptyJobDetails);
+  const [estimateItems, setEstimateItems] = useState<LineItem[]>([newItem()]);
+  const [estimateNo, setEstimateNo] = useState(estimateNumber);
+  const [estimateNotes, setEstimateNotes] = useState("");
+  const [estimateStatus, setEstimateStatus] = useState("");
+  const [estimatePickerItemId, setEstimatePickerItemId] = useState<string | null>(null);
+  const [estimateSearch, setEstimateSearch] = useState("");
+  const [recordsQuery, setRecordsQuery] = useState("");
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.price || 0), 0);
@@ -72,6 +94,20 @@ export default function Home() {
       rounded: Math.round(total),
     };
   }, [items, activeGst.enabled, activeGst.taxRate]);
+
+  const estimateTotals = useMemo(() => {
+    const subtotal = estimateItems.reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.price || 0), 0);
+    const tax = activeGst.enabled ? (subtotal * activeGst.taxRate) / 100 : 0;
+    const total = subtotal + tax;
+    return {
+      subtotal,
+      tax,
+      cgst: activeGst.enabled ? tax / 2 : 0,
+      sgst: activeGst.enabled ? tax / 2 : 0,
+      total,
+      rounded: Math.round(total),
+    };
+  }, [estimateItems, activeGst.enabled, activeGst.taxRate]);
 
   const customerPhoneReady = normalizeCustomerPhone(customer.phone).length === 10;
   const matchedTemplates = store.templates.filter((template) =>
@@ -88,6 +124,13 @@ export default function Home() {
   const pickerOptions = store.parts.filter((part) => (part.type || "part") === pickerType);
   const filteredParts = pickerOptions.filter((part) =>
     `${part.name} ${part.partNumber}`.toLowerCase().includes(pickerQuery),
+  );
+  const estimatePickerItem = estimateItems.find((item) => item.id === estimatePickerItemId);
+  const estimatePickerQuery = estimatePickerItem?.name.trim().toLowerCase() || "";
+  const estimatePickerType: ItemType = estimatePickerItem?.type || "part";
+  const estimatePickerOptions = store.parts.filter((part) => (part.type || "part") === estimatePickerType);
+  const estimateFilteredParts = estimatePickerOptions.filter((part) =>
+    `${part.name} ${part.partNumber}`.toLowerCase().includes(estimatePickerQuery),
   );
 
   function login() {
@@ -120,9 +163,31 @@ export default function Home() {
     });
   }
 
+  function updateEstimateItem(id: string, patch: Partial<LineItem>) {
+    setEstimateItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function pickEstimatePart(itemId: string, partName: string) {
+    const part = store.parts.find((entry) => entry.name === partName);
+    updateEstimateItem(itemId, {
+      name: partName,
+      price: part?.price ?? 0,
+      partNumber: part?.partNumber ?? "",
+      type: part?.type || "part",
+    });
+  }
+
   function typePartName(itemId: string, partName: string) {
     const part = store.parts.find((entry) => entry.name.toLowerCase() === partName.toLowerCase());
     updateItem(
+      itemId,
+      part ? { name: part.name, price: part.price, partNumber: part.partNumber, type: part.type || "part" } : { name: partName },
+    );
+  }
+
+  function typeEstimatePartName(itemId: string, partName: string) {
+    const part = store.parts.find((entry) => entry.name.toLowerCase() === partName.toLowerCase());
+    updateEstimateItem(
       itemId,
       part ? { name: part.name, price: part.price, partNumber: part.partNumber, type: part.type || "part" } : { name: partName },
     );
@@ -136,6 +201,16 @@ export default function Home() {
     if (!found) return;
     setCustomer(found);
     setJobDetails((current) => applyCustomerToJobDetails(current, found));
+  }
+
+  function findEstimateCustomer(phone: string) {
+    setEstimateCustomer((current) => ({ ...current, phone }));
+    const normalizedPhone = phone.replace(/\D/g, "");
+    if (!normalizedPhone) return;
+    const found = store.customers.find((entry) => entry.phone.replace(/\D/g, "") === normalizedPhone);
+    if (!found) return;
+    setEstimateCustomer(found);
+    setEstimateJobDetails((current) => applyCustomerToJobDetails(current, found));
   }
 
   function saveCustomer() {
@@ -153,6 +228,23 @@ export default function Home() {
     }));
     setCustomer(record);
     setStatus("Customer saved.");
+    return true;
+  }
+
+  function saveEstimateCustomer() {
+    if (!estimateCustomer.name.trim() || !estimateCustomer.phone.trim()) {
+      setEstimateStatus("Name aur phone mandatory hai.");
+      return false;
+    }
+    const record = customerFromForm(estimateCustomer, estimateJobDetails);
+    setStore((current) => ({
+      ...current,
+      customers: [
+        record,
+        ...current.customers.filter((entry) => entry.phone.replace(/\D/g, "") !== record.phone.replace(/\D/g, "")),
+      ],
+    }));
+    setEstimateCustomer(record);
     return true;
   }
 
@@ -368,6 +460,184 @@ export default function Home() {
     return doc;
   }
 
+  async function createEstimatePdf() {
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 36;
+    const sectioned = splitItems(estimateItems);
+    let y = 44;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Service Estimate", pageWidth / 2, y, { align: "center" });
+    y += 28;
+
+    if (store.company.logoUrl) {
+      try {
+        const logoBlob = await fetch(store.company.logoUrl).then((response) => response.blob());
+        const logoData = await imageToDataUrl(logoBlob);
+        doc.addImage(logoData, "PNG", margin, y - 8, 42, 42);
+      } catch {
+        // PDF should still generate if logo fetch fails.
+      }
+    }
+
+    doc.setFontSize(13);
+    doc.text(store.company.name, margin + 54, y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(store.company.address, margin + 54, y + 14, { maxWidth: 260 });
+    doc.text(`${store.company.phone} | ${store.company.email}`, margin + 54, y + 38);
+    doc.text(activeGst.enabled ? `GSTIN: ${activeGst.gstNumber}` : "Without GST estimate", margin + 54, y + 52);
+    doc.text(`Estimate No.: ${estimateNo}`, pageWidth - margin, y, { align: "right" });
+    doc.text(`Date: ${new Date().toLocaleDateString("en-IN")}`, pageWidth - margin, y + 14, { align: "right" });
+    y += 84;
+
+    doc.setDrawColor(210);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 20;
+    doc.setFont("helvetica", "bold");
+    doc.text("Customer", margin, y);
+    doc.text("Vehicle", pageWidth / 2, y);
+    doc.setFont("helvetica", "normal");
+    y += 15;
+    doc.text(estimateCustomer.name || "-", margin, y);
+    doc.text(`Phone: ${estimateCustomer.phone || "-"}`, margin, y + 14);
+    doc.text(`Email: ${estimateCustomer.email || "-"}`, margin, y + 28);
+    doc.text(`Reg.: ${estimateJobDetails.registrationNo || estimateCustomer.vehicle || "-"}`, pageWidth / 2, y);
+    doc.text(`Model: ${estimateJobDetails.model || "-"}`, pageWidth / 2, y + 14);
+    doc.text(`Service: ${estimateJobDetails.serviceType || "-"}`, pageWidth / 2, y + 28);
+    y += 58;
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Items", margin, y);
+    y += 12;
+    doc.setFillColor(230, 230, 230);
+    doc.rect(margin, y, pageWidth - margin * 2, 22, "F");
+    doc.setFontSize(9);
+    doc.text("Type", margin + 6, y + 14);
+    doc.text("Description", margin + 70, y + 14);
+    doc.text("Qty", pageWidth - 180, y + 14);
+    doc.text("Rate", pageWidth - 132, y + 14);
+    doc.text("Amount", pageWidth - 48, y + 14, { align: "right" });
+    y += 34;
+    doc.setFont("helvetica", "normal");
+    [...sectioned.parts, ...sectioned.labour].forEach((item) => {
+      const amount = Number(item.qty || 0) * Number(item.price || 0);
+      doc.text(item.type === "part" ? "Part" : "Labour", margin + 6, y);
+      doc.text(item.name || "Custom item", margin + 70, y, { maxWidth: pageWidth - 290 });
+      doc.text(String(item.qty || 0), pageWidth - 180, y);
+      doc.text(pdfMoney(item.price), pageWidth - 104, y, { align: "right" });
+      doc.text(pdfMoney(amount), pageWidth - 48, y, { align: "right" });
+      y += 18;
+    });
+    y += 16;
+
+    doc.line(pageWidth - 240, y - 10, pageWidth - margin, y - 10);
+    const rows: Array<[string, number]> = [
+      ["Subtotal", estimateTotals.subtotal],
+      [`CGST ${activeGst.enabled ? activeGst.taxRate / 2 : 0}%`, estimateTotals.cgst],
+      [`SGST ${activeGst.enabled ? activeGst.taxRate / 2 : 0}%`, estimateTotals.sgst],
+      ["Rounded Total", estimateTotals.rounded],
+    ];
+    rows.forEach(([label, value], index) => {
+      doc.setFont("helvetica", index === rows.length - 1 ? "bold" : "normal");
+      doc.text(label, pageWidth - 220, y);
+      doc.text(pdfMoney(value), pageWidth - 48, y, { align: "right" });
+      y += 17;
+    });
+
+    if (estimateNotes.trim()) {
+      y += 18;
+      doc.setFont("helvetica", "bold");
+      doc.text("Notes", margin, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(estimateNotes, margin, y + 15, { maxWidth: pageWidth - margin * 2 });
+    }
+
+    doc.setFontSize(8);
+    doc.text("This is an estimate. Final invoice may change after inspection and customer approval.", margin, 810, {
+      maxWidth: pageWidth - margin * 2,
+    });
+    return doc;
+  }
+
+  function saveEstimate(nextStatus: "draft" | "sent" = "draft") {
+    if (!saveEstimateCustomer()) return false;
+    const record = {
+      id: crypto.randomUUID(),
+      estimateNo,
+      customer: customerFromForm(estimateCustomer, estimateJobDetails),
+      jobDetails: estimateJobDetails,
+      items: estimateItems.map(normalizeItem),
+      notes: estimateNotes,
+      subtotal: estimateTotals.subtotal,
+      tax: estimateTotals.tax,
+      total: estimateTotals.total,
+      rounded: estimateTotals.rounded,
+      gstProfileId: activeGst.id,
+      status: nextStatus,
+      createdAt: new Date().toISOString(),
+    };
+    setStore((current) => ({
+      ...current,
+      estimates: [record, ...current.estimates.filter((entry) => entry.estimateNo !== estimateNo)],
+    }));
+    setEstimateStatus(nextStatus === "sent" ? "Estimate saved and ready to share." : "Estimate saved.");
+    return true;
+  }
+
+  async function sendEstimateToCustomer() {
+    if (!saveEstimate("sent")) return;
+    const waUrl = customerWhatsAppUrl(
+      estimateCustomer.phone,
+      `Namaste ${estimateCustomer.name}, CAR MECHANIC estimate ${estimateNo} ready hai. Total amount Rs ${estimateTotals.rounded}.`,
+    );
+    if (!waUrl) {
+      setEstimateStatus("Customer ka valid 10-digit phone number add karo.");
+      return;
+    }
+    const doc = await createEstimatePdf();
+    doc.save(`${estimateNo}.pdf`);
+    window.open(waUrl, "_blank", "noopener,noreferrer");
+    setEstimateStatus("WhatsApp opened. Estimate PDF download ho gaya.");
+  }
+
+  async function suggestEstimateWithAi() {
+    setEstimateStatus("AI estimate suggestion loading...");
+    try {
+      const response = await fetch("/api/ai/estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          issue: estimateNotes,
+          vehicle: `${estimateCustomer.vehicle || ""} ${estimateJobDetails.model || ""} ${estimateJobDetails.registrationNo || ""}`,
+          service: estimateJobDetails.serviceType,
+          parts: store.parts,
+        }),
+      });
+      const data = await response.json();
+      if (!data.ok) {
+        setEstimateStatus(data.error || "AI suggestion unavailable.");
+        return;
+      }
+      const suggestion = data.suggestion as { title?: string; notes?: string; items?: Array<{ name?: string; qty?: number; type?: ItemType }> };
+      if (suggestion.notes) setEstimateNotes(suggestion.notes);
+      const suggestedItems = (suggestion.items || [])
+        .map((entry) => {
+          const found = store.parts.find((part) => part.name.toLowerCase() === String(entry.name || "").toLowerCase());
+          return found
+            ? normalizeItem({ ...found, qty: entry.qty || 1, type: (found.type || entry.type || "part") as ItemType })
+            : null;
+        })
+        .filter(Boolean) as LineItem[];
+      if (suggestedItems.length) setEstimateItems(suggestedItems.map((item) => ({ ...item, id: crypto.randomUUID() })));
+      setEstimateStatus(suggestion.title ? `AI suggestion applied: ${suggestion.title}` : "AI suggestion applied.");
+    } catch (error) {
+      setEstimateStatus(error instanceof Error ? error.message : "AI suggestion unavailable.");
+    }
+  }
+
   async function sendInvoiceToCustomer() {
     if (!saveCustomer()) return;
 
@@ -489,6 +759,30 @@ export default function Home() {
     <main className="car-bg-app min-h-screen overflow-x-hidden text-slate-900">
       <AppHeader />
 
+      <div className="mx-auto w-full max-w-7xl px-3 pt-3 sm:px-4">
+        <div className="flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white/95 p-2 shadow-sm">
+          {([
+            ["invoice", "Invoice", <FileText key="invoice" className="h-4 w-4" />],
+            ["estimate", "Estimate", <FilePlus2 key="estimate" className="h-4 w-4" />],
+            ["enquiries", `Enquiries (${store.enquiries.length})`, <Inbox key="enquiries" className="h-4 w-4" />],
+            ["bookings", `Bookings (${store.bookings.length})`, <CalendarClock key="bookings" className="h-4 w-4" />],
+          ] as Array<[AdminTab, string, ReactNode]>).map(([tab, label, icon]) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-bold ${
+                activeTab === tab ? "bg-[#1f6f64] text-white" : "text-slate-600 hover:bg-[#e8f4f1] hover:text-[#1f6f64]"
+              }`}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab === "invoice" ? (
       <div className="mx-auto grid w-full min-w-0 max-w-7xl gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 lg:grid-cols-[minmax(0,1fr)_390px]">
         <section className="min-w-0 space-y-3 sm:space-y-4">
               <Panel icon={<UserRound />} title="Customer">
@@ -602,6 +896,132 @@ export default function Home() {
               </div>
             </aside>
       </div>
+      ) : null}
+
+      {activeTab === "estimate" ? (
+        <div className="mx-auto grid w-full min-w-0 max-w-7xl gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 lg:grid-cols-[minmax(0,1fr)_390px]">
+          <section className="min-w-0 space-y-3 sm:space-y-4">
+            <Panel icon={<UserRound />} title="Estimate customer">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+                <Field label="Phone *"><input value={estimateCustomer.phone} onChange={(event) => findEstimateCustomer(event.target.value)} className="input" inputMode="tel" /></Field>
+                <Field label="Name *"><input value={estimateCustomer.name} onChange={(event) => setEstimateCustomer({ ...estimateCustomer, name: event.target.value })} className="input" /></Field>
+                <Field label="Email"><input value={estimateCustomer.email || ""} onChange={(event) => setEstimateCustomer({ ...estimateCustomer, email: event.target.value })} className="input" /></Field>
+                <Field label="Vehicle"><input value={estimateCustomer.vehicle || ""} onChange={(event) => setEstimateCustomer({ ...estimateCustomer, vehicle: event.target.value })} className="input" /></Field>
+              </div>
+            </Panel>
+
+            <Panel icon={<Car />} title="Vehicle and service">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+                <Field label="Registration no."><input value={estimateJobDetails.registrationNo} onChange={(e) => setEstimateJobDetails({ ...estimateJobDetails, registrationNo: e.target.value.toUpperCase() })} className="input" /></Field>
+                <Field label="Model"><input value={estimateJobDetails.model} onChange={(e) => setEstimateJobDetails({ ...estimateJobDetails, model: e.target.value.toUpperCase() })} className="input" /></Field>
+                <Field label="Chassis no."><input value={estimateJobDetails.chassisNo} onChange={(e) => setEstimateJobDetails({ ...estimateJobDetails, chassisNo: e.target.value })} className="input" /></Field>
+                <Field label="Mileage"><input value={estimateJobDetails.mileage} onChange={(e) => setEstimateJobDetails({ ...estimateJobDetails, mileage: e.target.value })} className="input" /></Field>
+                <Field label="Service type"><input value={estimateJobDetails.serviceType} onChange={(e) => setEstimateJobDetails({ ...estimateJobDetails, serviceType: e.target.value })} className="input" /></Field>
+                <Field label="Service advisor"><input value={estimateJobDetails.serviceAdvisor} onChange={(e) => setEstimateJobDetails({ ...estimateJobDetails, serviceAdvisor: e.target.value })} className="input" /></Field>
+              </div>
+              <Field label="Estimate notes / customer issue">
+                <textarea value={estimateNotes} onChange={(event) => setEstimateNotes(event.target.value)} className="input min-h-24 py-3" placeholder="Customer issue, inspection note, recommendation..." />
+              </Field>
+              <button type="button" onClick={suggestEstimateWithAi} className="btn-secondary mt-3"><Bot className="h-4 w-4" /> Suggest estimate</button>
+            </Panel>
+
+            <Panel icon={<PackagePlus />} title="Estimate items">
+              <div className="space-y-3">
+                {estimateItems.map((item) => (
+                  <div key={item.id} className="grid gap-2 rounded-lg border border-slate-200 bg-[#f8fbfa] p-3 md:grid-cols-[110px_minmax(0,1fr)_130px_100px_100px_44px]">
+                    <select value={item.type} onChange={(event) => updateEstimateItem(item.id, { type: event.target.value as ItemType })} className="input">
+                      <option value="part">Part</option>
+                      <option value="labour">Labour</option>
+                    </select>
+                    <div className="flex min-w-0 gap-2">
+                      <input value={item.name} onChange={(event) => typeEstimatePartName(item.id, event.target.value)} onFocus={() => setEstimatePickerItemId(item.id)} className="input min-w-0 flex-1" placeholder="Part or labour item" />
+                      <button onClick={() => setEstimatePickerItemId(item.id)} className="shrink-0 rounded-md border border-slate-300 bg-white px-3 text-[#1f6f64]" title="Search parts" aria-label="Search parts">
+                        <Search className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <input value={item.partNumber} onChange={(event) => updateEstimateItem(item.id, { partNumber: event.target.value })} className="input" placeholder="Part Number" />
+                    <input type="number" value={item.price} onChange={(event) => updateEstimateItem(item.id, { price: Number(event.target.value) })} className="input" placeholder="Rate" />
+                    <input type="number" value={item.qty} onChange={(event) => updateEstimateItem(item.id, { qty: Number(event.target.value) })} className="input" placeholder="Qty" />
+                    <button onClick={() => setEstimateItems((current) => current.filter((entry) => entry.id !== item.id))} className="justify-self-end rounded-md p-2 text-red-600 hover:bg-red-50 md:justify-self-auto" title="Remove" aria-label="Remove item">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setEstimateItems((current) => [...current, newItem()])} className="btn-secondary mt-3"><Plus className="h-4 w-4" /> Add item</button>
+            </Panel>
+
+            <RecordsList
+              title="Saved estimates"
+              records={store.estimates}
+              query={estimateSearch}
+              setQuery={setEstimateSearch}
+              render={(entry) => (
+                <div key={entry.id} className="rounded-lg border border-slate-200 bg-[#f8fbfa] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-bold">{entry.estimateNo} · {entry.customer.name || "-"}</p>
+                    <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-[#1f6f64]">{entry.status}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">{entry.customer.phone || "-"} · {entry.jobDetails.registrationNo || entry.customer.vehicle || "-"} · {money(entry.rounded)}</p>
+                </div>
+              )}
+            />
+          </section>
+
+          <aside className="min-w-0 space-y-3 sm:space-y-4">
+            <div className="space-y-3 sm:space-y-4 lg:sticky lg:top-[4.25rem]">
+              <Panel icon={<BadgeIndianRupee />} title="Estimate summary">
+                <Field label="Estimate no."><input value={estimateNo} onChange={(event) => setEstimateNo(event.target.value)} className="input" /></Field>
+                <div className="mt-4 space-y-2 text-sm">
+                  <Row label="Subtotal" value={money(estimateTotals.subtotal)} />
+                  <Row label={`CGST ${activeGst.enabled ? activeGst.taxRate / 2 : 0}%`} value={money(estimateTotals.cgst)} />
+                  <Row label={`SGST ${activeGst.enabled ? activeGst.taxRate / 2 : 0}%`} value={money(estimateTotals.sgst)} />
+                  <Row label="Rounded total" value={money(estimateTotals.rounded)} strong />
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                  <button onClick={() => saveEstimate("draft")} className="btn-secondary w-full"><Save className="h-4 w-4" /> Save</button>
+                  <button onClick={async () => (await createEstimatePdf()).save(`${estimateNo}.pdf`)} className="btn-secondary w-full"><Download className="h-4 w-4" /> PDF</button>
+                  <button onClick={sendEstimateToCustomer} disabled={normalizeCustomerPhone(estimateCustomer.phone).length !== 10} className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50">
+                    <MessageCircle className="h-4 w-4" /> Send estimate
+                  </button>
+                </div>
+                {estimateStatus ? <p className="mt-3 text-sm text-red-600">{estimateStatus}</p> : null}
+              </Panel>
+              <InvoicePreview company={store.company} gst={activeGst} customer={estimateCustomer} jobDetails={estimateJobDetails} invoiceNo={estimateNo} items={estimateItems} totals={estimateTotals} title="Service Estimate" />
+            </div>
+          </aside>
+        </div>
+      ) : null}
+
+      {activeTab === "enquiries" ? (
+        <AdminRecordsPanel
+          title="Website enquiries"
+          icon={<Inbox />}
+          query={recordsQuery}
+          setQuery={setRecordsQuery}
+          records={store.enquiries}
+          statuses={["new", "contacted", "closed"]}
+          onStatus={(id, nextStatus) => setStore((current) => ({
+            ...current,
+            enquiries: current.enquiries.map((entry) => entry.id === id ? { ...entry, status: nextStatus as EnquiryStatus } : entry),
+          }))}
+        />
+      ) : null}
+
+      {activeTab === "bookings" ? (
+        <AdminRecordsPanel
+          title="Slot bookings"
+          icon={<CalendarClock />}
+          query={recordsQuery}
+          setQuery={setRecordsQuery}
+          records={store.bookings}
+          statuses={["pending", "confirmed", "completed", "cancelled"]}
+          onStatus={(id, nextStatus) => setStore((current) => ({
+            ...current,
+            bookings: current.bookings.map((entry) => entry.id === id ? { ...entry, status: nextStatus as BookingStatus } : entry),
+          }))}
+        />
+      ) : null}
 
       {templatePickerOpen ? (
         <div className="fixed inset-0 z-50 flex items-end bg-slate-900/35 p-0 sm:items-center sm:p-6">
@@ -696,7 +1116,129 @@ export default function Home() {
           </div>
         </div>
       ) : null}
+
+      {estimatePickerItemId ? (
+        <div className="fixed inset-0 z-50 flex items-end bg-slate-900/35 p-0 sm:items-center sm:p-6">
+          <div className="max-h-[82vh] w-full overflow-hidden rounded-t-xl border border-slate-200 bg-white shadow-xl sm:mx-auto sm:max-w-lg sm:rounded-xl">
+            <div className="border-b border-slate-200 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold">Select {estimatePickerType === "part" ? "part" : "labour"}</p>
+                  <p className="text-xs text-slate-500">Search by name or part number.</p>
+                </div>
+                <button className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold" onClick={() => setEstimatePickerItemId(null)}>Close</button>
+              </div>
+              <input value={estimatePickerItem?.name || ""} onChange={(event) => estimatePickerItemId && typeEstimatePartName(estimatePickerItemId, event.target.value)} className="input mt-3" autoFocus placeholder={`Search ${estimatePickerType === "part" ? "parts" : "labour"}...`} />
+            </div>
+            <div className="max-h-[58vh] overflow-y-auto p-3">
+              {(estimatePickerQuery ? estimateFilteredParts : estimatePickerOptions).map((part) => (
+                <button
+                  key={part.id}
+                  onClick={() => {
+                    pickEstimatePart(estimatePickerItemId, part.name);
+                    setEstimatePickerItemId(null);
+                  }}
+                  className="mb-2 flex w-full items-center justify-between rounded-lg border border-slate-200 bg-[#f8fbfa] p-3 text-left"
+                >
+                  <span>
+                    <span className="block font-semibold">{part.name}</span>
+                    <span className="block text-xs text-slate-500">Part Number {part.partNumber || "-"} · {money(part.price)}</span>
+                  </span>
+                  <span className="text-sm font-bold text-[#1f6f64]">Select</span>
+                </button>
+              ))}
+              {estimatePickerQuery && !estimateFilteredParts.length ? (
+                <p className="rounded-lg border border-slate-200 bg-[#f8fbfa] p-4 text-sm text-slate-500">
+                  No matching {estimatePickerType === "part" ? "parts" : "labour"} found.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
+  );
+}
+
+function RecordsList<T>({
+  title,
+  records,
+  query,
+  setQuery,
+  render,
+}: {
+  title: string;
+  records: T[];
+  query: string;
+  setQuery: (value: string) => void;
+  render: (record: T) => ReactNode;
+}) {
+  const lowered = query.toLowerCase();
+  const filtered = records.filter((record) => JSON.stringify(record).toLowerCase().includes(lowered));
+  return (
+    <Panel icon={<FileText />} title={title}>
+      <input value={query} onChange={(event) => setQuery(event.target.value)} className="input mb-3" placeholder="Search..." />
+      <div className="space-y-2">
+        {filtered.map(render)}
+        {!filtered.length ? <p className="rounded-lg border border-slate-200 bg-[#f8fbfa] p-4 text-sm text-slate-500">No records found.</p> : null}
+      </div>
+    </Panel>
+  );
+}
+
+type AdminRecord = WebsiteEnquiry | SlotBooking;
+
+function AdminRecordsPanel({
+  title,
+  icon,
+  query,
+  setQuery,
+  records,
+  statuses,
+  onStatus,
+}: {
+  title: string;
+  icon: ReactNode;
+  query: string;
+  setQuery: (value: string) => void;
+  records: AdminRecord[];
+  statuses: string[];
+  onStatus: (id: string, status: string) => void;
+}) {
+  const lowered = query.toLowerCase();
+  const filtered = records
+    .filter((record) => `${record.name} ${record.phone} ${record.vehicle} ${record.model} ${record.registrationNo} ${record.service} ${record.status}`.toLowerCase().includes(lowered))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  return (
+    <div className="mx-auto w-full max-w-7xl px-3 py-3 sm:px-4 sm:py-4">
+      <Panel icon={icon} title={title}>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} className="input mb-3" placeholder="Search name, phone, service, vehicle, status..." />
+        <div className="grid gap-3">
+          {filtered.map((record) => (
+            <article key={record.id} className="rounded-lg border border-slate-200 bg-[#f8fbfa] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-bold text-slate-950">{record.name} · {record.phone}</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {record.service} · {record.vehicle} {record.model} · {record.registrationNo || "-"}
+                  </p>
+                  {"date" in record ? (
+                    <p className="mt-1 text-sm font-semibold text-[#1f6f64]">{record.date} at {record.time}</p>
+                  ) : null}
+                </div>
+                <select value={record.status} onChange={(event) => onStatus(record.id, event.target.value)} className="input w-auto min-w-36">
+                  {statuses.map((status) => <option key={status}>{status}</option>)}
+                </select>
+              </div>
+              {record.message ? <p className="mt-3 rounded-md bg-white p-3 text-sm text-slate-700">{record.message}</p> : null}
+              <p className="mt-2 text-xs text-slate-500">{new Date(record.createdAt).toLocaleString("en-IN")}</p>
+            </article>
+          ))}
+          {!filtered.length ? <p className="rounded-lg border border-slate-200 bg-[#f8fbfa] p-4 text-sm text-slate-500">No records found.</p> : null}
+        </div>
+      </Panel>
+    </div>
   );
 }
 
@@ -708,6 +1250,7 @@ function InvoicePreview({
   invoiceNo,
   items,
   totals,
+  title = "Job Card Retail - Tax Invoice",
 }: {
   company: Company;
   gst: GstProfile;
@@ -716,6 +1259,7 @@ function InvoicePreview({
   invoiceNo: string;
   items: LineItem[];
   totals: { subtotal: number; tax: number; cgst: number; sgst: number; total: number; rounded: number };
+  title?: string;
 }) {
   const sectioned = splitItems(items);
   const rows = [...sectioned.parts, ...sectioned.labour];
@@ -724,7 +1268,7 @@ function InvoicePreview({
     <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-zinc-800 bg-white text-black shadow-sm">
       <div className="bg-black px-3 py-3 text-white sm:px-4">
         <p className="text-center font-mono text-[9px] uppercase leading-snug tracking-wide text-zinc-300 sm:text-[10px]">Original for recipient / Duplicate for transporter / Triplicate for supplier</p>
-        <div className="mt-2 bg-zinc-300 py-1 text-center text-base font-semibold text-black sm:text-lg">Job Card Retail - Tax Invoice</div>
+        <div className="mt-2 bg-zinc-300 py-1 text-center text-base font-semibold text-black sm:text-lg">{title}</div>
       </div>
       <div className="space-y-4 p-3 text-xs sm:p-4">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -736,7 +1280,7 @@ function InvoicePreview({
             <p>{gst.enabled ? `Dealer GSTIN: ${gst.gstNumber}` : "Without GST bill"}</p>
           </div>
           <div className="text-left sm:text-right">
-            <p>Invoice No. : {invoiceNo}</p>
+            <p>{title.includes("Estimate") ? "Estimate" : "Invoice"} No. : {invoiceNo}</p>
             <p>Date : {new Date().toLocaleDateString("en-IN")}</p>
             <p>Job Card No. : {jobDetails.jobCardNo || "-"}</p>
             <p>Reg.No. : {jobDetails.registrationNo || customer.vehicle || "-"}</p>

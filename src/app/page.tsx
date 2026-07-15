@@ -1,5 +1,8 @@
+"use client";
+
 import {
   BatteryCharging,
+  CalendarClock,
   CheckCircle2,
   ClipboardCheck,
   Clock,
@@ -13,9 +16,9 @@ import {
   Star,
   Wrench,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
-import ownerPhoto from "../../public/PHOTO-2026-07-03-21-08-40.jpg";
+import { useState, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
+import { normalizeStore, seedStore, type SlotBooking, type Store, type WebsiteEnquiry } from "@/lib/invoice-store";
 
 const services = [
   { icon: <Gauge />, title: "Computer diagnostics", text: "Scanner-based fault tracing, warning light diagnosis, and repair direction." },
@@ -26,16 +29,98 @@ const services = [
   { icon: <BatteryCharging />, title: "Electrical systems", text: "Battery, starter, alternator, wiring, lights, sensors, and charging issues." },
 ];
 
+const serviceNames = services.map((service) => service.title);
+const slotTimes = ["09:30", "10:30", "11:30", "12:30", "14:30", "15:30", "16:30", "17:30"];
 const brands = ["Maruti Suzuki", "Hyundai", "Honda", "Toyota", "Mahindra", "Tata", "Kia", "Skoda", "Volkswagen", "Renault"];
+const today = new Date().toISOString().slice(0, 10);
 
-const process = [
-  ["01", "Inspect", "Vehicle check, scan, road-test notes, and customer concern capture."],
-  ["02", "Explain", "Clear job-card with work, parts, labour, and priority shared upfront."],
-  ["03", "Repair", "Skilled execution using brand-aware procedures and practical workshop experience."],
-  ["04", "Deliver", "Final checks, invoice, and customer update through phone or WhatsApp."],
-];
+const emptyLead = {
+  name: "",
+  phone: "",
+  email: "",
+  vehicle: "",
+  model: "",
+  registrationNo: "",
+  service: serviceNames[0],
+  message: "",
+};
+
+type LeadValues = typeof emptyLead & { date?: string; time?: string };
+
+async function loadRemoteStore() {
+  const response = await fetch("/api/store", { cache: "no-store" });
+  const data = (await response.json()) as { store?: Store | null };
+  return normalizeStore(data.store || seedStore);
+}
+
+async function saveRemoteStore(store: Store) {
+  await fetch("/api/store", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(store),
+  });
+}
 
 export default function LandingPage() {
+  const [enquiry, setEnquiry] = useState<LeadValues>(emptyLead);
+  const [booking, setBooking] = useState<LeadValues>({ ...emptyLead, date: today, time: slotTimes[0] });
+  const [enquiryStatus, setEnquiryStatus] = useState("");
+  const [bookingStatus, setBookingStatus] = useState("");
+  const [saving, setSaving] = useState<"enquiry" | "booking" | "">("");
+
+  async function submitEnquiry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving("enquiry");
+    setEnquiryStatus("");
+    try {
+      const store = await loadRemoteStore();
+      const record: WebsiteEnquiry = {
+        id: crypto.randomUUID(),
+        ...enquiry,
+        status: "new",
+        createdAt: new Date().toISOString(),
+      };
+      await saveRemoteStore({ ...store, enquiries: [record, ...store.enquiries] });
+      setEnquiry(emptyLead);
+      setEnquiryStatus("Enquiry sent. Workshop team will contact you.");
+    } catch (error) {
+      setEnquiryStatus(error instanceof Error ? error.message : "Unable to send enquiry.");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function submitBooking(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving("booking");
+    setBookingStatus("");
+    try {
+      const store = await loadRemoteStore();
+      const duplicate = store.bookings.some(
+        (entry) => entry.date === booking.date && entry.time === booking.time && entry.status !== "cancelled",
+      );
+      if (duplicate) {
+        setBookingStatus("This slot is already booked. Please choose another time.");
+        return;
+      }
+      const record: SlotBooking = {
+        id: crypto.randomUUID(),
+        ...booking,
+        date: booking.date || today,
+        time: booking.time || slotTimes[0],
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      };
+      await saveRemoteStore({ ...store, bookings: [record, ...store.bookings] });
+      setBooking({ ...emptyLead, date: today, time: slotTimes[0] });
+      setBookingStatus("Slot request saved. Workshop team will confirm it.");
+    } catch (error) {
+      setBookingStatus(error instanceof Error ? error.message : "Unable to book slot.");
+    } finally {
+      setSaving("");
+    }
+  }
+
   return (
     <main className="min-h-screen max-w-[100vw] overflow-x-hidden bg-[#f6f8f5] text-slate-900">
       <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
@@ -69,22 +154,18 @@ export default function LandingPage() {
               Precision service for modern cars.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-slate-700 sm:text-lg">
-              CAR MECHANIC brings professional diagnostics, repair discipline, and transparent workshop billing under the guidance of Mr Waseem Khan.
+              CAR MECHANIC brings professional diagnostics, repair discipline, transparent estimates, and workshop billing from Sarita Vihar, New Delhi.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <a href="tel:+919718717540" className="inline-flex min-h-12 items-center justify-center rounded-md bg-[#176f63] px-5 text-sm font-black text-white shadow-lg shadow-[#176f63]/20 hover:bg-[#12594f]">
-                <Phone className="mr-2 h-4 w-4" /> Book service
+              <a href="#book-slot" className="inline-flex min-h-12 items-center justify-center rounded-md bg-[#176f63] px-5 text-sm font-black text-white shadow-lg shadow-[#176f63]/20 hover:bg-[#12594f]">
+                <CalendarClock className="mr-2 h-4 w-4" /> Book slot
               </a>
-              <a href="https://wa.me/919718717540" className="inline-flex min-h-12 items-center justify-center rounded-md border border-slate-300 bg-white px-5 text-sm font-black text-slate-900 shadow-sm hover:border-[#176f63] hover:text-[#176f63]">
-                <MessageCircle className="mr-2 h-4 w-4" /> WhatsApp now
+              <a href="#enquiry" className="inline-flex min-h-12 items-center justify-center rounded-md border border-slate-300 bg-white px-5 text-sm font-black text-slate-900 shadow-sm hover:border-[#176f63] hover:text-[#176f63]">
+                <MessageCircle className="mr-2 h-4 w-4" /> Send enquiry
               </a>
             </div>
             <div className="mt-9 grid max-w-[22rem] grid-cols-1 gap-3 sm:max-w-3xl sm:grid-cols-3">
-              {[
-                ["16+", "Years hands-on experience"],
-                ["10+", "Popular car brands handled"],
-                ["GST", "Job-card invoice system"],
-              ].map(([value, label]) => (
+              {[["16+", "Years hands-on experience"], ["10+", "Popular car brands handled"], ["GST", "Estimate and invoice system"]].map(([value, label]) => (
                 <div key={label} className="rounded-md border border-white/70 bg-white/85 p-4 shadow-sm backdrop-blur">
                   <p className="text-3xl font-black text-[#176f63]">{value}</p>
                   <p className="mt-1 text-sm font-bold text-slate-600">{label}</p>
@@ -97,22 +178,24 @@ export default function LandingPage() {
 
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[420px_minmax(0,1fr)] lg:items-center lg:py-16">
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
-            <Image src={ownerPhoto} alt="Mr Waseem Khan, owner of CAR MECHANIC" priority className="aspect-[16/11] w-full object-cover object-[62%_38%]" />
+          <div className="rounded-lg border border-[#a9d8d0] bg-[#e6f3f0] p-6 shadow-xl">
+            <MapPin className="h-9 w-9 text-[#176f63]" />
+            <h2 className="mt-4 text-3xl font-black leading-tight text-slate-950">CAR MECHANIC Workshop</h2>
+            <div className="mt-5 space-y-3 text-sm font-semibold leading-6 text-slate-700">
+              <p>Plot No. H-98 Sarita Vihar, Kalindi Kunj, New Delhi 110025</p>
+              <p>Phone: +91 97187 17540</p>
+              <p>Email: carmechanic99722@gmail.com</p>
+              <p>Open for diagnostics, service, repair estimates, parts, labour, and final billing.</p>
+            </div>
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-black uppercase tracking-wide text-[#176f63]">Owner & automotive expert</p>
-            <h2 className="mt-3 max-w-3xl text-3xl font-black leading-tight text-slate-950 sm:text-5xl">Mr Waseem Khan</h2>
+            <p className="text-sm font-black uppercase tracking-wide text-[#176f63]">Workshop details</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-black leading-tight text-slate-950 sm:text-5xl">Transparent service flow from enquiry to delivery.</h2>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
-              With 16+ years of experience, Mr Waseem Khan has worked across major car brands and workshop environments, combining practical diagnosis with customer-first service delivery.
+              Send your issue, reserve a visit slot, receive a clear estimate, and get job-card billing with parts, labour, and GST details.
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              {[
-                "Brand-aware service approach",
-                "Transparent parts and labour billing",
-                "Diagnosis before repair",
-                "Customer updates on phone and WhatsApp",
-              ].map((item) => (
+              {["Scanner diagnosis before major repair", "Saved customer and vehicle records", "Estimate and invoice PDF sharing", "Phone and WhatsApp customer updates"].map((item) => (
                 <p key={item} className="flex items-center gap-3 rounded-md border border-slate-200 bg-[#f8fbfa] px-4 py-3 text-sm font-bold text-slate-700">
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-[#176f63]" /> {item}
                 </p>
@@ -146,32 +229,9 @@ export default function LandingPage() {
       </section>
 
       <section className="border-y border-slate-200 bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:py-16">
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
-            <div>
-              <p className="text-sm font-black uppercase tracking-wide text-[#176f63]">Service process</p>
-              <h2 className="mt-3 max-w-3xl text-3xl font-black leading-tight text-slate-950 sm:text-4xl">A cleaner workshop flow from first check to final invoice.</h2>
-              <div className="mt-8 grid gap-4 sm:grid-cols-2">
-                {process.map(([step, title, text]) => (
-                  <article key={step} className="rounded-md border border-slate-200 bg-[#f8fbfa] p-5">
-                    <p className="font-mono text-sm font-black text-[#176f63]">{step}</p>
-                    <h3 className="mt-3 text-xl font-black text-slate-950">{title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{text}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-lg border border-[#a9d8d0] bg-[#e6f3f0] p-6">
-              <FileText className="h-9 w-9 text-[#176f63]" />
-              <h3 className="mt-4 text-2xl font-black text-slate-950">Professional invoice system</h3>
-              <p className="mt-3 text-sm leading-6 text-slate-700">
-                Job-card details, customer records, parts, labour, GST profiles, PDF generation, and WhatsApp sharing are managed through the workshop admin.
-              </p>
-              <Link href="/admin" className="mt-5 inline-flex min-h-11 items-center justify-center rounded-md bg-[#176f63] px-4 text-sm font-black text-white">
-                Open admin
-              </Link>
-            </div>
-          </div>
+        <div className="mx-auto grid max-w-7xl gap-6 px-4 py-12 sm:px-6 lg:grid-cols-2 lg:py-16">
+          <LeadForm id="enquiry" title="Send service enquiry" icon={<MessageCircle />} status={enquiryStatus} saving={saving === "enquiry"} submitLabel="Send enquiry" values={enquiry} setValues={setEnquiry} onSubmit={submitEnquiry} />
+          <LeadForm id="book-slot" title="Book workshop slot" icon={<CalendarClock />} status={bookingStatus} saving={saving === "booking"} submitLabel="Book slot" values={booking} setValues={setBooking} onSubmit={submitBooking} booking />
         </div>
       </section>
 
@@ -192,11 +252,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="grid gap-3">
-            {[
-              { icon: <Star />, title: "Experienced leadership", text: "16+ years under Mr Waseem Khan." },
-              { icon: <Clock />, title: "Timely communication", text: "Clear status updates before delivery." },
-              { icon: <MapPin />, title: "Convenient location", text: "Plot No. H-98 Sarita Vihar, Kalindi Kunj." },
-            ].map((item) => (
+            {[{ icon: <Star />, title: "Experienced leadership", text: "16+ years workshop experience." }, { icon: <Clock />, title: "Timed visits", text: "Reserve a date and time before arriving." }, { icon: <FileText />, title: "Clear paperwork", text: "Estimate, invoice, and customer records in admin." }].map((item) => (
               <article key={item.title} className="flex gap-4 rounded-md border border-slate-200 bg-white p-4 shadow-sm">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-[#e6f3f0] text-[#176f63] [&>svg]:h-5 [&>svg]:w-5">{item.icon}</span>
                 <span>
@@ -215,7 +271,7 @@ export default function LandingPage() {
             <p className="text-sm font-black uppercase tracking-wide text-[#9be0d3]">Book a visit</p>
             <h2 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">Need a reliable mechanic for your car?</h2>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-200">
-              Call or WhatsApp CAR MECHANIC for diagnostics, service, AC, brake, engine, and electrical work.
+              Call, WhatsApp, send enquiry, or book a workshop slot for diagnostics, service, AC, brake, engine, and electrical work.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
@@ -229,5 +285,64 @@ export default function LandingPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+function LeadForm({
+  id,
+  title,
+  icon,
+  status,
+  saving,
+  submitLabel,
+  values,
+  setValues,
+  onSubmit,
+  booking,
+}: {
+  id: string;
+  title: string;
+  icon: ReactNode;
+  status: string;
+  saving: boolean;
+  submitLabel: string;
+  values: LeadValues;
+  setValues: Dispatch<SetStateAction<LeadValues>>;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  booking?: boolean;
+}) {
+  const patch = (field: keyof LeadValues, value: string) => setValues((current) => ({ ...current, [field]: value }));
+
+  return (
+    <form id={id} onSubmit={onSubmit} className="rounded-lg border border-slate-200 bg-[#f8fbfa] p-5 shadow-sm">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="flex h-11 w-11 items-center justify-center rounded-md bg-[#e6f3f0] text-[#176f63] [&>svg]:h-5 [&>svg]:w-5">{icon}</span>
+        <h2 className="text-xl font-black text-slate-950">{title}</h2>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <input required value={values.name} onChange={(event) => patch("name", event.target.value)} className="input" placeholder="Name *" />
+        <input required value={values.phone} onChange={(event) => patch("phone", event.target.value)} className="input" placeholder="Phone *" inputMode="tel" />
+        <input value={values.email} onChange={(event) => patch("email", event.target.value)} className="input" placeholder="Email" type="email" />
+        <select required value={values.service} onChange={(event) => patch("service", event.target.value)} className="input">
+          {serviceNames.map((service) => <option key={service}>{service}</option>)}
+        </select>
+        <input required value={values.vehicle} onChange={(event) => patch("vehicle", event.target.value)} className="input" placeholder="Vehicle *" />
+        <input required value={values.model} onChange={(event) => patch("model", event.target.value)} className="input" placeholder="Model *" />
+        <input required value={values.registrationNo} onChange={(event) => patch("registrationNo", event.target.value.toUpperCase())} className="input" placeholder="Registration no. *" />
+        {booking ? (
+          <>
+            <input required type="date" min={today} value={values.date || today} onChange={(event) => patch("date", event.target.value)} className="input" />
+            <select required value={values.time || slotTimes[0]} onChange={(event) => patch("time", event.target.value)} className="input">
+              {slotTimes.map((time) => <option key={time}>{time}</option>)}
+            </select>
+          </>
+        ) : null}
+      </div>
+      <textarea required value={values.message} onChange={(event) => patch("message", event.target.value)} className="input mt-3 min-h-28 py-3" placeholder={booking ? "Work needed or issue details *" : "Tell us what service you need *"} />
+      <button disabled={saving} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-md bg-[#176f63] px-5 text-sm font-black text-white disabled:opacity-60">
+        {saving ? "Saving..." : submitLabel}
+      </button>
+      {status ? <p className="mt-3 text-sm font-semibold text-[#176f63]">{status}</p> : null}
+    </form>
   );
 }

@@ -59,6 +59,10 @@ export type Template = {
   items: LineItem[]
 }
 
+export type EstimateStatus = "draft" | "sent" | "approved" | "closed"
+export type EnquiryStatus = "new" | "contacted" | "closed"
+export type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled"
+
 export type Customer = {
   name: string
   phone: string
@@ -85,6 +89,52 @@ export type JobDetails = {
   customerGstin: string
 }
 
+export type EstimateRecord = {
+  id: string
+  estimateNo: string
+  customer: Customer
+  jobDetails: JobDetails
+  items: LineItem[]
+  notes: string
+  subtotal: number
+  tax: number
+  total: number
+  rounded: number
+  gstProfileId: string
+  status: EstimateStatus
+  createdAt: string
+}
+
+export type WebsiteEnquiry = {
+  id: string
+  name: string
+  phone: string
+  email?: string
+  vehicle: string
+  model: string
+  registrationNo: string
+  service: string
+  message: string
+  status: EnquiryStatus
+  createdAt: string
+}
+
+export type SlotBooking = {
+  id: string
+  name: string
+  phone: string
+  email?: string
+  vehicle: string
+  model: string
+  registrationNo: string
+  service: string
+  date: string
+  time: string
+  message: string
+  status: BookingStatus
+  createdAt: string
+}
+
 export type Store = {
   company: Company
   admin: AdminAccount
@@ -94,6 +144,9 @@ export type Store = {
   parts: Part[]
   templates: Template[]
   customers: Customer[]
+  estimates: EstimateRecord[]
+  enquiries: WebsiteEnquiry[]
+  bookings: SlotBooking[]
 }
 
 export const defaultCompany: Company = {
@@ -164,6 +217,9 @@ export const seedStore: Store = {
     },
   ],
   customers: [],
+  estimates: [],
+  enquiries: [],
+  bookings: [],
 }
 
 export const emptyCustomer: Customer = {
@@ -207,6 +263,9 @@ export const newItem = (): LineItem => ({
 
 export const invoiceNumber = () =>
   `BR/${new Date().getFullYear().toString().slice(-2)}${Date.now().toString().slice(-6)}`
+
+export const estimateNumber = () =>
+  `EST/${new Date().getFullYear().toString().slice(-2)}${Date.now().toString().slice(-6)}`
 
 export function money(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -301,6 +360,58 @@ export function normalizeItem(item: Partial<LineItem>): LineItem {
   }
 }
 
+export function normalizeEstimate(estimate: Partial<EstimateRecord>): EstimateRecord {
+  return {
+    id: estimate.id || crypto.randomUUID(),
+    estimateNo: estimate.estimateNo || estimateNumber(),
+    customer: normalizeCustomer(estimate.customer || {}),
+    jobDetails: { ...emptyJobDetails, ...estimate.jobDetails },
+    items: estimate.items?.map(normalizeItem) || [],
+    notes: estimate.notes || "",
+    subtotal: Number(estimate.subtotal || 0),
+    tax: Number(estimate.tax || 0),
+    total: Number(estimate.total || 0),
+    rounded: Number(estimate.rounded || estimate.total || 0),
+    gstProfileId: estimate.gstProfileId || defaultGstProfiles[0].id,
+    status: estimate.status || "draft",
+    createdAt: estimate.createdAt || new Date().toISOString(),
+  }
+}
+
+export function normalizeEnquiry(enquiry: Partial<WebsiteEnquiry>): WebsiteEnquiry {
+  return {
+    id: enquiry.id || crypto.randomUUID(),
+    name: enquiry.name || "",
+    phone: enquiry.phone || "",
+    email: enquiry.email || "",
+    vehicle: enquiry.vehicle || "",
+    model: enquiry.model || "",
+    registrationNo: enquiry.registrationNo || "",
+    service: enquiry.service || "",
+    message: enquiry.message || "",
+    status: enquiry.status || "new",
+    createdAt: enquiry.createdAt || new Date().toISOString(),
+  }
+}
+
+export function normalizeBooking(booking: Partial<SlotBooking>): SlotBooking {
+  return {
+    id: booking.id || crypto.randomUUID(),
+    name: booking.name || "",
+    phone: booking.phone || "",
+    email: booking.email || "",
+    vehicle: booking.vehicle || "",
+    model: booking.model || "",
+    registrationNo: booking.registrationNo || "",
+    service: booking.service || "",
+    date: booking.date || "",
+    time: booking.time || "",
+    message: booking.message || "",
+    status: booking.status || "pending",
+    createdAt: booking.createdAt || new Date().toISOString(),
+  }
+}
+
 export function normalizeStore(input: Partial<Store> | null | undefined): Store {
   const parsed = input || {}
   const oldCompany = parsed.company as
@@ -335,6 +446,9 @@ export function normalizeStore(input: Partial<Store> | null | undefined): Store 
         }))
       : seedStore.templates,
     customers: parsed.customers?.map(normalizeCustomer) || [],
+    estimates: parsed.estimates?.map(normalizeEstimate) || [],
+    enquiries: parsed.enquiries?.map(normalizeEnquiry) || [],
+    bookings: parsed.bookings?.map(normalizeBooking) || [],
   }
 }
 
